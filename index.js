@@ -3,9 +3,9 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
 
 const bot = mineflayer.createBot({
-  host: 'localhost',
-  port: 37269,
-  username: 'lookAt_Bot'
+  host: 'bataksurvival.aternos.me',
+  port: 12032,
+  username: 'lookAt'
 });
 
 bot.loadPlugin(pathfinder);
