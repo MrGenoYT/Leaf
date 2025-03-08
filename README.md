@@ -1,2 +1,3 @@
 # lookatBOT
-my minecraft server bot
+LookAtBOT is a Mineflayer-powered Minecraft bot that connects to a specified Minecraft server, moves randomly, and interacts with the environment by occasionally jumping and looking at nearby players. It is lightweight, easy to set up, and can be deployed online using platforms like Render. To get started, install Node.js and npm, then clone the repository and install dependencies using npm install. Modify index.js to set your server IP and port, then start the bot with npm start. For online deployment, create a web service on Render, connect your GitHub repository, and set the start command to npm start. The bot will then remain online, running on your Minecraft server.
+
