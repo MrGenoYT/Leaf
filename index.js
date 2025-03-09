@@ -65,12 +65,6 @@ function startBot() {
     
     setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
     setTimeout(moveRandomly, 5000);
-
-    setInterval(() => {
-  if (bot && bot._client) {
-    bot._client.write('keep_alive', { keepAliveId: BigInt(Date.now()) });
-  }
-}, 10000); // Every 10 seconds
   });
 
   bot.on('end', (reason) => {
@@ -162,15 +156,6 @@ function preventAfk() {
     bot.setControlState('sneak', true);
     setTimeout(() => bot.setControlState('sneak', false), Math.random() * 1000 + 500);
   }), 60000 + Math.random() * 10000);
-}
-
-// Make the bot look at the nearest player
-function lookAtNearestPlayer() {
-  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
-  if (!playerEntity) return;
-
-  const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-  bot.lookAt(pos);
 }
 
 // Web monitoring server
