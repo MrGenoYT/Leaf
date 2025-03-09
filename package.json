@@ -9,8 +9,8 @@
   "author": "itsankit",
   "license": "MIT",
   "dependencies": {
-    "mineflayer": "^2.26.0",
-    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer": "^4.26.0",
+    "mineflayer-pathfinder": "^5.0.1",
     "express": "^4.19.2"
   }
 }
