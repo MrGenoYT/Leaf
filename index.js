@@ -65,6 +65,12 @@ function startBot() {
     
     setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
     setTimeout(moveRandomly, 5000);
+
+    setInterval(() => {
+  if (bot && bot._client) {
+    bot._client.write('keep_alive', { keepAliveId: BigInt(Date.now()) });
+  }
+}, 10000); // Every 10 seconds
   });
 
   bot.on('end', (reason) => {
