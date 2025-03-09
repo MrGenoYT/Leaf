@@ -9,7 +9,7 @@ const botOptions = {
   host: 'bataksurvival.aternos.me',
   port: 12032,
   username: 'lookAt',
-  connectTimeout: 90000,
+  connectTimeout: 120000,
 };
 
 const discordWebhook = 'https://discord.com/api/webhooks/1348283775930470492/03Z_3or9YY6uMB-1ANCEpBG229tHbM8_uYORdptwdm_5uraEewp69eHmj1m73GbYUzVD';
