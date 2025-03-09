@@ -21,35 +21,43 @@ let bot;
 let reconnectTimeout = null;
 let botStartTime = Date.now();
 
-// Send a message to the main webhook with an embed
-function sendEmbed(title, description, color = 0x3498db, fields = []) {
-  axios.post(discordWebhook, {
-    embeds: [{
-      title,
-      description,
-      color,
-      fields,
-      timestamp: new Date().toISOString(),
-    }],
-  }).catch(err => console.error('❌ Webhook Error:', err.message));
+// Function to send an embed message to Discord
+async function sendEmbed(title, description, color = 0x3498db, fields = []) {
+  try {
+    await axios.post(discordWebhook, {
+      embeds: [{
+        title,
+        description,
+        color,
+        fields,
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error('❌ Webhook Error:', err.message);
+  }
 }
 
-// Send chat messages to the chat logging webhook
-function sendChatMessage(username, message) {
-  axios.post(chatWebhook, {
-    embeds: [{
-      author: { name: username },
-      description: message,
-      color: 0x00ff00,
-      timestamp: new Date().toISOString(),
-    }],
-  }).catch(err => console.error('❌ Chat Webhook Error:', err.message));
+// Function to send chat messages to Discord
+async function sendChatMessage(username, message) {
+  try {
+    await axios.post(chatWebhook, {
+      embeds: [{
+        author: { name: username },
+        description: message,
+        color: 0x00ff00,
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error('❌ Chat Webhook Error:', err.message);
+  }
 }
 
 // Start the bot
 function startBot() {
   if (bot) bot.removeAllListeners();
-  console.log("Starting bot...");
+  console.log("🔄 Starting the bot...");
 
   bot = mineflayer.createBot(botOptions);
   bot.loadPlugin(pathfinder);
@@ -62,25 +70,52 @@ function startBot() {
   });
 
   bot.on('end', (reason) => {
-    console.log(`⚠️ Bot disconnected: ${reason}. Reconnecting in 10 seconds...`);
+    console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
     sendEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
-    console.log(`⚠️ Bot was kicked: ${reason}. Reconnecting...`);
+    console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
     sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
     reconnectBot();
   });
 
   bot.on('error', (err) => {
-    console.log(`❌ Bot error: ${err.message}`);
+    console.error(`❌ Bot error: ${err.message}`);
   });
 
-  bot.on('physicTick', lookAtNearestPlayer);
-  bot.on('chat', (username, message) => sendChatMessage(username, message));
-  bot.on('playerJoined', playerJoinHandler);
-  bot.on('playerLeft', playerLeaveHandler);
+  bot.on('physicTick', () => {
+    try {
+      lookAtNearestPlayer();
+    } catch (err) {
+      console.error('⚠️ Error in physicTick event:', err.message);
+    }
+  });
+
+  bot.on('chat', (username, message) => {
+    try {
+      sendChatMessage(username, message);
+    } catch (err) {
+      console.error(`⚠️ Error handling chat message from ${username}:`, err.message);
+    }
+  });
+
+  bot.on('playerJoined', (player) => {
+    try {
+      playerJoinHandler(player);
+    } catch (err) {
+      console.error('⚠️ Error handling player join:', err.message);
+    }
+  });
+
+  bot.on('playerLeft', (player) => {
+    try {
+      playerLeaveHandler(player);
+    } catch (err) {
+      console.error('⚠️ Error handling player leave:', err.message);
+    }
+  });
 }
 
 // Reconnect the bot if it disconnects
@@ -112,15 +147,19 @@ function playerLeaveHandler(player) {
 // Make the bot move randomly
 function moveRandomly() {
   setInterval(() => {
-    if (!bot.entity) return;
-    const x = Math.floor(Math.random() * 10 - 5);
-    const z = Math.floor(Math.random() * 10 - 5);
-    const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
-    bot.pathfinder.setGoal(goal);
-    
-    if (Math.random() > 0.7) {
-      bot.setControlState('jump', true);
-      setTimeout(() => bot.setControlState('jump', false), 500);
+    try {
+      if (!bot.entity) return;
+      const x = Math.floor(Math.random() * 10 - 5);
+      const z = Math.floor(Math.random() * 10 - 5);
+      const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
+      bot.pathfinder.setGoal(goal);
+
+      if (Math.random() > 0.7) {
+        bot.setControlState('jump', true);
+        setTimeout(() => bot.setControlState('jump', false), 500);
+      }
+    } catch (err) {
+      console.error('⚠️ Error in moveRandomly function:', err.message);
     }
   }, 5000);
 }
@@ -128,52 +167,41 @@ function moveRandomly() {
 // Prevent the bot from being kicked for inactivity
 function preventAfk() {
   setInterval(() => {
-    bot.swingArm();
-    bot.setControlState('sneak', true);
-    setTimeout(() => bot.setControlState('sneak', false), 500);
+    try {
+      bot.swingArm();
+      bot.setControlState('sneak', true);
+      setTimeout(() => bot.setControlState('sneak', false), 500);
+    } catch (err) {
+      console.error('⚠️ Error in preventAfk function:', err.message);
+    }
   }, 60000);
 }
 
 // Make the bot look at the nearest player
 function lookAtNearestPlayer() {
-  const playerFilter = (entity) => entity.type === 'player';
-  const playerEntity = bot.nearestEntity(playerFilter);
-  if (!playerEntity) return;
-  const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-  bot.lookAt(pos);
+  try {
+    const playerFilter = (entity) => entity.type === 'player';
+    const playerEntity = bot.nearestEntity(playerFilter);
+    if (!playerEntity) return;
+    const pos = playerEntity.position.offset(0, playerEntity.height, 0);
+    bot.lookAt(pos);
+  } catch (err) {
+    console.error('⚠️ Error in lookAtNearestPlayer function:', err.message);
+  }
 }
-
-// Get the bot's uptime in hours and minutes
-function getUptime() {
-  const uptime = Date.now() - botStartTime;
-  return `${Math.floor(uptime / 3600000)}h ${Math.floor((uptime % 3600000) / 60000)}m`;
-}
-
-// Send server status to Discord
-function sendServerStatus() {
-  const serverUptime = os.uptime();
-  sendEmbed('📡 LookAt Server Details', 'Here are the current server details:', 0x3498db, [
-    { name: 'Bot Uptime', value: getUptime(), inline: true },
-    { name: 'Server Uptime', value: `${Math.floor(serverUptime / 3600)}h ${Math.floor((serverUptime % 3600) / 60)}m`, inline: true },
-    { name: 'Server Name', value: botOptions.host, inline: true },
-    { name: 'Server IP', value: botOptions.host, inline: true },
-    { name: 'Server Port', value: `${botOptions.port}`, inline: true },
-  ]);
-}
-
-// Send server status every 30 minutes
-setInterval(sendServerStatus, 1800000);
 
 // Web monitoring server
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  const onlinePlayers = Object.keys(bot.players).length;
-  res.json({
-    message: "✅ Bot is running!",
-    onlinePlayers,
-  });
+  try {
+    const onlinePlayers = Object.keys(bot.players).length;
+    res.json({ message: "✅ Bot is running!", onlinePlayers });
+  } catch (err) {
+    console.error('⚠️ Error in web server route:', err.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 app.listen(PORT, () => {
