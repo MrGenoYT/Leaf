@@ -1,6 +1,6 @@
 {
   "name": "lookat-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An afk bot that moves randomly and looks at the nearest player.",
   "main": "index.js",
   "scripts": {
