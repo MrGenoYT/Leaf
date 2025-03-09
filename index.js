@@ -3,7 +3,7 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
 
 const bot = mineflayer.createBot({
-  host: 'bataksurvival.aternos.me:12032',
+  host: 'bataksurvival.aternos.me',
   port: 12032,
   username: 'lookAt'
 });
