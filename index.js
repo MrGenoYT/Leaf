@@ -128,7 +128,7 @@ let reconnectTimeout = null;
 // 🔹 Function to Start the Bot
 function startBot() {
   if (bot) bot.removeAllListeners(); // Remove old listeners to prevent duplicates
-  console.log("Starting bot...");
+  console.log("Starting the bot...");
 
   bot = mineflayer.createBot(botOptions);
   bot.loadPlugin(pathfinder);
