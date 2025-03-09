@@ -1,4 +1,4 @@
-// LookAtBOT
+// LookAt Bot
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -63,37 +63,34 @@ function startBot() {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
     
-    setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
+    setTimeout(preventAfk, 5000);
     setTimeout(moveRandomly, 5000);
+
+    // Start the web server after bot spawns
+    app.listen(PORT, () => {
+      console.log(`🌐 Web server running on port ${PORT}`);
+    });
+
+    // Keep-Alive Packet Logger
+    setInterval(() => {
+      if (bot && bot._client) {
+        bot._client.write('keep_alive', { id: BigInt(Date.now()) });
+        console.log("📡 Keep-alive packet sent.");
+      }
+    }, 10000);
   });
 
-  bot.on('end', (reason) => {
-    console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
-    sendEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
-    reconnectBot();
-  });
+  bot.on('end', (reason) => handleDisconnection(`⚠️ Bot disconnected: ${reason}`));
+  bot.on('kicked', (reason) => handleDisconnection(`🚫 Bot was kicked: ${reason}`));
+  bot.on('error', (err) => handleError(err));
 
-  bot.on('kicked', (reason) => {
-    console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
-    sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
-    reconnectBot();
-  });
-
-  bot.on('error', (err) => {
-    console.error(`❌ Bot error: ${err.message}`);
-    if (err.code === 'ECONNRESET') {
-      console.log("🔄 Attempting to reconnect...");
-      reconnectBot();
-    }
-  });
-
-  bot.on('physicTick', () => safeBotAction(lookAtNearestPlayer));
+  bot.on('physicTick', () => safeBotAction(() => lookAtNearestPlayer()));
   bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
   bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
   bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
 }
 
-// Helper function to safely execute bot actions
+// Safe Execution Wrapper
 function safeBotAction(action) {
   try {
     if (bot) action();
@@ -102,7 +99,7 @@ function safeBotAction(action) {
   }
 }
 
-// Reconnect the bot if it disconnects
+// Reconnection Handler
 function reconnectBot() {
   if (reconnectTimeout) return;
 
@@ -111,30 +108,43 @@ function reconnectBot() {
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 30000); // Increased reconnect delay to prevent frequent rejoining
+  }, 30000);
 }
 
-// Handle player joining
+// Handle Disconnections
+function handleDisconnection(message) {
+  console.log(message);
+  sendEmbed('⚠️ LookAtBOT Disconnection', message, 0xff0000);
+  reconnectBot();
+}
+
+// Enhanced Error Handling
+function handleError(err) {
+  console.error(`❌ Bot error: ${err.message}`);
+  if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+    console.log("🔄 Attempting to reconnect...");
+    reconnectBot();
+  }
+}
+
+// Player Events
 function playerJoinHandler(player) {
-  const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
   sendEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
-    { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
+    { name: 'Current Players', value: `${Object.keys(bot.players).length}`, inline: true },
   ]);
 }
 
-// Handle player leaving
 function playerLeaveHandler(player) {
-  const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0;
   sendEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
-    { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
+    { name: 'Current Players', value: `${Object.keys(bot.players).length - 1}`, inline: true },
   ]);
 }
 
-// Make the bot move randomly
+// Random Movement
 function moveRandomly() {
   setInterval(() => safeBotAction(() => {
     if (!bot.entity) return;
-    
+
     const x = Math.floor(Math.random() * 10 - 5);
     const z = Math.floor(Math.random() * 10 - 5);
     const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
@@ -149,7 +159,7 @@ function moveRandomly() {
   }), 5000);
 }
 
-// Prevent the bot from being kicked for inactivity
+// Prevent AFK Kicks
 function preventAfk() {
   setInterval(() => safeBotAction(() => {
     bot.swingArm();
@@ -158,31 +168,29 @@ function preventAfk() {
   }), 60000 + Math.random() * 10000);
 }
 
-// Make the bot look at the nearest player
+// Look at Nearest Player (Only if Present)
 function lookAtNearestPlayer() {
-  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
+  if (!bot.entity) return;
+  
+  const playerEntity = bot.nearestEntity(entity => entity.type === 'player');
   if (!playerEntity) return;
 
   const pos = playerEntity.position.offset(0, playerEntity.height, 0);
   bot.lookAt(pos);
+  console.log(`👀 Looking at player: ${playerEntity.username}`);
 }
 
-// Web monitoring server
+// Web Monitoring Server
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
   try {
-    const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-    res.json({ message: "✅ Bot is running!", onlinePlayers });
+    res.json({ message: "✅ Bot is running!", onlinePlayers: Object.keys(bot.players).length });
   } catch (err) {
-    console.error('⚠️ Error in web server route:', err.message);
+    console.error('⚠️ Web server error:', err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
 });
 
 // Start the bot
