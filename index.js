@@ -1,7 +1,4 @@
-const mineflayer = require('mineflayer');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const express = require('express');
-
+// LookAt Bot
 // 🔹const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
