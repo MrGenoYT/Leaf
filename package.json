@@ -1,17 +1,17 @@
 {
   "name": "lookat-bot",
   "version": "1.0.0",
-  "description": "An afk bot that moves randomly and looks at the nearest player.",
+  "description": "An AFK bot that moves randomly and looks at the nearest player.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "itsankit",
-  "license": "MIT",
   "dependencies": {
     "mineflayer": "^4.26.0",
     "mineflayer-pathfinder": "^2.4.5",
     "express": "^5.0.1",
-    "axios": "^1.6.0"
-  }
+    "axios": "^1.8.2"
+  },
+  "author": "itsankit",
+  "license": "MIT"
 }
