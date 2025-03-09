@@ -3,14 +3,6 @@ const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
-const os = require('os');
-
-// Fix for punycode deprecation
-try {
-  require.resolve('punycode');
-} catch (e) {
-  console.warn("⚠️ Warning: 'punycode' module is deprecated. No need to import it.");
-}
 
 // Server Details
 const botOptions = {
@@ -25,7 +17,6 @@ const chatWebhook = 'https://discord.com/api/webhooks/1348283959473213462/UA2lue
 
 let bot;
 let reconnectTimeout = null;
-let botStartTime = Date.now();
 
 // Function to send an embed message to Discord
 async function sendEmbed(title, description, color = 0x3498db, fields = []) {
@@ -71,8 +62,9 @@ function startBot() {
   bot.once('spawn', () => {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
-    moveRandomly();
-    preventAfk();
+    
+    setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
+    setTimeout(moveRandomly, 5000);
   });
 
   bot.on('end', (reason) => {
@@ -89,56 +81,42 @@ function startBot() {
 
   bot.on('error', (err) => {
     console.error(`❌ Bot error: ${err.message}`);
-  });
-
-  bot.on('physicTick', () => {
-    try {
-      lookAtNearestPlayer();
-    } catch (err) {
-      console.error('⚠️ Error in physicTick event:', err.message);
+    if (err.code === 'ECONNRESET') {
+      console.log("🔄 Attempting to reconnect...");
+      reconnectBot();
     }
   });
 
-  bot.on('chat', (username, message) => {
-    try {
-      sendChatMessage(username, message);
-    } catch (err) {
-      console.error(`⚠️ Error handling chat message from ${username}:`, err.message);
-    }
-  });
+  bot.on('physicTick', () => safeBotAction(lookAtNearestPlayer));
+  bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
+  bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
+  bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
+}
 
-  bot.on('playerJoined', (player) => {
-    try {
-      playerJoinHandler(player);
-    } catch (err) {
-      console.error('⚠️ Error handling player join:', err.message);
-    }
-  });
-
-  bot.on('playerLeft', (player) => {
-    try {
-      playerLeaveHandler(player);
-    } catch (err) {
-      console.error('⚠️ Error handling player leave:', err.message);
-    }
-  });
+// Helper function to safely execute bot actions
+function safeBotAction(action) {
+  try {
+    if (bot) action();
+  } catch (err) {
+    console.error(`⚠️ Error in function ${action.name}:`, err.message);
+  }
 }
 
 // Reconnect the bot if it disconnects
 function reconnectBot() {
   if (reconnectTimeout) return;
-  
+
   console.log("🔄 Reconnecting in 30 seconds...");
   
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 30000); // Increased reconnect delay to 30 seconds to prevent frequent rejoining
+  }, 30000); // Increased reconnect delay to prevent frequent rejoining
 }
 
 // Handle player joining
 function playerJoinHandler(player) {
-  const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0; // Fix for undefined players
+  const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
   sendEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
@@ -146,7 +124,7 @@ function playerJoinHandler(player) {
 
 // Handle player leaving
 function playerLeaveHandler(player) {
-  const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0; // Fix for undefined players
+  const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0;
   sendEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
@@ -154,51 +132,39 @@ function playerLeaveHandler(player) {
 
 // Make the bot move randomly
 function moveRandomly() {
-  setInterval(() => {
-    try {
-      if (!bot.entity) return;
-      
-      const x = Math.floor(Math.random() * 10 - 5);
-      const z = Math.floor(Math.random() * 10 - 5);
-      const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
+  setInterval(() => safeBotAction(() => {
+    if (!bot.entity) return;
+    
+    const x = Math.floor(Math.random() * 10 - 5);
+    const z = Math.floor(Math.random() * 10 - 5);
+    const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
 
-      bot.pathfinder.setGoal(null); // Clears any existing goal to avoid conflicts
-      bot.pathfinder.setGoal(goal);
+    bot.pathfinder.setGoal(null);
+    bot.pathfinder.setGoal(goal);
 
-      if (Math.random() > 0.7) {
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 500);
-      }
-    } catch (err) {
-      console.error('⚠️ Error in moveRandomly function:', err.message);
+    if (Math.random() > 0.7) {
+      bot.setControlState('jump', true);
+      setTimeout(() => bot.setControlState('jump', false), 500);
     }
-  }, 5000);
+  }), 5000);
 }
 
 // Prevent the bot from being kicked for inactivity
 function preventAfk() {
-  setInterval(() => {
-    try {
-      bot.swingArm();
-      bot.setControlState('sneak', true);
-      setTimeout(() => bot.setControlState('sneak', false), Math.random() * 1000 + 500); // Randomized sneak duration
-    } catch (err) {
-      console.error('⚠️ Error in preventAfk function:', err.message);
-    }
-  }, 60000 + Math.random() * 10000); // Randomized interval
+  setInterval(() => safeBotAction(() => {
+    bot.swingArm();
+    bot.setControlState('sneak', true);
+    setTimeout(() => bot.setControlState('sneak', false), Math.random() * 1000 + 500);
+  }), 60000 + Math.random() * 10000);
 }
 
 // Make the bot look at the nearest player
 function lookAtNearestPlayer() {
-  try {
-    const playerFilter = (entity) => entity.type === 'player';
-    const playerEntity = bot.nearestEntity(playerFilter);
-    if (!playerEntity) return;
-    const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-    bot.lookAt(pos);
-  } catch (err) {
-    console.error('⚠️ Error in lookAtNearestPlayer function:', err.message);
-  }
+  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
+  if (!playerEntity) return;
+
+  const pos = playerEntity.position.offset(0, playerEntity.height, 0);
+  bot.lookAt(pos);
 }
 
 // Web monitoring server
@@ -207,7 +173,7 @@ const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
   try {
-    const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0; // Fix for undefined players
+    const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
     res.json({ message: "✅ Bot is running!", onlinePlayers });
   } catch (err) {
     console.error('⚠️ Error in web server route:', err.message);
