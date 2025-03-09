@@ -11,7 +11,6 @@ const botOptions = {
   host: 'bataksurvival.aternos.me',
   port: 12032,
   username: 'lookAt',
-  connectTimeout: 90000,
 };
 
 let bot;
