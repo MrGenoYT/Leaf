@@ -1,10 +1,8 @@
-// LookAtBOT
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
 
-// Server Details
 const botOptions = {
   host: 'bataksurvival.aternos.me',
   port: 12032,
@@ -15,44 +13,86 @@ const botOptions = {
 const discordWebhook = 'https://discord.com/api/webhooks/1348283775930470492/03Z_3or9YY6uMB-1ANCEpBG229tHbM8_uYORdptwdm_5uraEewp69eHmj1m73GbYUzVD';
 const chatWebhook = 'https://discord.com/api/webhooks/1348283959473213462/UA2lue2vWNaGLZesYGYKsKmY5WtqT3I2pnLNlA96YQCmR8-CeN71ShSLWRAWLWYnGkTZ';
 
-let bot;
+let bot = null;
 let reconnectTimeout = null;
+let lookInterval = null;
+let moveInterval = null;
+let afkInterval = null;
+let packetQueue = [];
 
-// Function to send an embed message to Discord
-async function sendEmbed(title, description, color = 0x3498db, fields = []) {
-  try {
-    await axios.post(discordWebhook, {
-      embeds: [{
-        title,
-        description,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-      }],
-    });
-  } catch (err) {
-    console.error('❌ Webhook Error:', err.message);
+// Queue and execute packets safely
+function queuePacket(packetName, data) {
+  packetQueue.push({ packetName, data });
+  processPacketQueue();
+}
+
+function processPacketQueue() {
+  if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) return;
+
+  while (packetQueue.length > 0) {
+    const { packetName, data } = packetQueue.shift();
+    try {
+      bot._client.write(packetName, data);
+    } catch (err) {
+      console.error("Packet sending error:", err.message);
+      packetQueue.unshift({ packetName, data }); // Requeue packet if error occurs
+    }
   }
 }
 
-// Function to send chat messages to Discord
+// Send an embed message to Discord
+async function sendEmbed(title, description, color = 0x3498db, fields = []) {
+  queuePacket('discordWebhook', { embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }] });
+}
+
+// Send chat messages to Discord
 async function sendChatMessage(username, message) {
+  queuePacket('chatWebhook', { embeds: [{ author: { name: username }, description: message, color: 0x00ff00, timestamp: new Date().toISOString() }] });
+}
+
+// Patch packet sending for error handling
+function patchPacketSending() {
+  if (!bot || !bot._client) return;
+  const originalWrite = bot._client.write.bind(bot._client);
+  
+  bot._client.write = function (packetName, data) {
+    try {
+      originalWrite(packetName, data);
+    } catch (err) {
+      console.error("Packet sending error:", packetName, ":", err.message);
+      queuePacket(packetName, data); // Requeue packet
+    }
+  };
+
+  bot._client.on('data', (data) => {
+    try {
+      // Let mineflayer handle the packet normally
+    } catch (err) {
+      console.error("Packet receiving error:", err.message);
+    }
+  });
+}
+
+// Update bot look direction
+function updateLookDirection() {
+  if (!bot || !bot.entity) return;
   try {
-    await axios.post(chatWebhook, {
-      embeds: [{
-        author: { name: username },
-        description: message,
-        color: 0x00ff00,
-        timestamp: new Date().toISOString(),
-      }],
-    });
+    const playerEntity = bot.nearestEntity(entity => entity.type === 'player');
+    if (playerEntity) {
+      const pos = playerEntity.position.offset(0, playerEntity.height, 0);
+      queuePacket('look', pos);
+    }
   } catch (err) {
-    console.error('❌ Chat Webhook Error:', err.message);
+    console.error("Error updating look direction:", err.message);
   }
 }
 
 // Start the bot
 function startBot() {
+  if (lookInterval) clearInterval(lookInterval);
+  if (moveInterval) clearInterval(moveInterval);
+  if (afkInterval) clearInterval(afkInterval);
+
   if (bot) bot.removeAllListeners();
   console.log("🔄 Starting the bot...");
 
@@ -62,9 +102,11 @@ function startBot() {
   bot.once('spawn', () => {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
-    
-    setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
-    setTimeout(moveRandomly, 5000);
+    patchPacketSending();
+
+    lookInterval = setInterval(updateLookDirection, 5000);
+    moveInterval = setInterval(moveRandomly, 5000);
+    afkInterval = setInterval(preventAfk, 60000 + Math.random() * 10000);
   });
 
   bot.on('end', (reason) => {
@@ -82,36 +124,28 @@ function startBot() {
   bot.on('error', (err) => {
     console.error(`❌ Bot error: ${err.message}`);
     if (err.code === 'ECONNRESET') {
-      console.log("🔄 Attempting to reconnect...");
       reconnectBot();
     }
   });
 
-  bot.on('physicTick', () => safeBotAction(lookAtNearestPlayer));
-  bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
-  bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
-  bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
+  bot.on('chat', (username, message) => sendChatMessage(username, message));
+  bot.on('playerJoined', (player) => playerJoinHandler(player));
+  bot.on('playerLeft', (player) => playerLeaveHandler(player));
 }
 
-// Helper function to safely execute bot actions
-function safeBotAction(action) {
-  try {
-    if (bot) action();
-  } catch (err) {
-    console.error(`⚠️ Error in function ${action.name}:`, err.message);
-  }
-}
-
-// Reconnect the bot if it disconnects
+// Reconnect the bot
 function reconnectBot() {
+  if (lookInterval) clearInterval(lookInterval);
+  if (moveInterval) clearInterval(moveInterval);
+  if (afkInterval) clearInterval(afkInterval);
+
   if (reconnectTimeout) return;
 
   console.log("🔄 Reconnecting in 30 seconds...");
-  
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 30000); // Increased reconnect delay to prevent frequent rejoining
+  }, 30000);
 }
 
 // Handle player joining
@@ -130,44 +164,43 @@ function playerLeaveHandler(player) {
   ]);
 }
 
-// Make the bot move randomly
+// Move randomly
 function moveRandomly() {
-  setInterval(() => safeBotAction(() => {
-    if (!bot.entity) return;
-    
+  if (!bot.entity) return;
+  try {
     const x = Math.floor(Math.random() * 10 - 5);
     const z = Math.floor(Math.random() * 10 - 5);
     const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
-
-    bot.pathfinder.setGoal(null);
+    queuePacket('move', { x, y: bot.entity.position.y, z });
     bot.pathfinder.setGoal(goal);
 
     if (Math.random() > 0.7) {
+      queuePacket('jump', {});
       bot.setControlState('jump', true);
       setTimeout(() => bot.setControlState('jump', false), 500);
     }
-  }), 5000);
+  } catch (err) {
+    console.error("Error in moveRandomly:", err.message);
+  }
 }
 
-// Prevent the bot from being kicked for inactivity
+// Prevent AFK kicks
 function preventAfk() {
-  setInterval(() => safeBotAction(() => {
+  try {
+    queuePacket('swing', {});
     bot.swingArm();
+    queuePacket('sneak', { state: true });
     bot.setControlState('sneak', true);
-    setTimeout(() => bot.setControlState('sneak', false), Math.random() * 1000 + 500);
-  }), 60000 + Math.random() * 10000);
+    setTimeout(() => {
+      queuePacket('sneak', { state: false });
+      bot.setControlState('sneak', false);
+    }, Math.random() * 1000 + 500);
+  } catch (err) {
+    console.error("Error in preventAfk:", err.message);
+  }
 }
 
-// Make the bot look at the nearest player
-function lookAtNearestPlayer() {
-  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
-  if (!playerEntity) return;
-
-  const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-  bot.lookAt(pos);
-}
-
-// Web monitoring server
+// Web server for monitoring
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -185,5 +218,5 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-// Start the bot
+// Start bot
 startBot();
