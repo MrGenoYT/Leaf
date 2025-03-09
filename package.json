@@ -1,7 +1,7 @@
 {
   "name": "lookat-bot",
   "version": "1.0.0",
-  "description": "A Mineflayer bot that moves randomly and looks at the nearest player.",
+  "description": "A bot that moves randomly and looks at the nearest player.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
