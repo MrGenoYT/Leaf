@@ -46,6 +46,25 @@ function processPacketQueue() {
   }
 }
 
+function sendKeepAlivePacket() {
+  if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) {
+    console.warn("⏳ Connection not stable, queuing keep-alive packet...");
+    queuePacket('keep_alive', { keepAliveId: BigInt(Date.now()) });
+    return;
+  }
+
+  try {
+    bot._client.write('keep_alive', { keepAliveId: BigInt(Date.now()) });
+    console.log("✅ Keep-alive packet sent.");
+  } catch (err) {
+    console.error("❌ Error sending keep-alive packet:", err.message);
+    queuePacket('keep_alive', { keepAliveId: BigInt(Date.now()) });
+  }
+}
+
+// Run keep-alive every 15 seconds
+setInterval(sendKeepAlivePacket, 15000);
+
 // --- Execute or Queue Actions ---
 // If the bot connection is ready, execute immediately; otherwise, queue the action.
 function executeOrQueue(action) {
