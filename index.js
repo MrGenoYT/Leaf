@@ -35,7 +35,14 @@ function moveRandomly() {
 // Express for web hosting on Render
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+
+app.get('/', (req, res) => {
+    res.send('Bot is running!');
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+});
 
 bot.on('physicTick', lookAtNearestPlayer);
 function lookAtNearestPlayer() {
