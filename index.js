@@ -1,8 +1,10 @@
+// LookAtBOT
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
 
+// Server Details
 const botOptions = {
   host: 'bataksurvival.aternos.me',
   port: 12032,
@@ -18,77 +20,181 @@ let reconnectTimeout = null;
 let lookInterval = null;
 let moveInterval = null;
 let afkInterval = null;
-let packetQueue = [];
+let pendingActions = [];   // Actions to execute when bot is ready
+let packetQueue = [];      // Low-level packet actions to retry
 
-// Queue and execute packets safely
+// --- Packet Queueing Functions ---
+// Call this to queue a packet action
 function queuePacket(packetName, data) {
   packetQueue.push({ packetName, data });
   processPacketQueue();
 }
 
+// Attempt to flush queued packets if connection is active
 function processPacketQueue() {
   if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) return;
-
   while (packetQueue.length > 0) {
     const { packetName, data } = packetQueue.shift();
     try {
       bot._client.write(packetName, data);
     } catch (err) {
-      console.error("Packet sending error:", err.message);
-      packetQueue.unshift({ packetName, data }); // Requeue packet if error occurs
+      console.error("Error sending queued packet", packetName, ":", err.message);
+      // Put it back at the front and break the loop to retry later
+      packetQueue.unshift({ packetName, data });
+      break;
     }
   }
 }
 
-// Send an embed message to Discord
-async function sendEmbed(title, description, color = 0x3498db, fields = []) {
-  queuePacket('discordWebhook', { embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }] });
+// --- Execute or Queue Actions ---
+// If the bot connection is ready, execute immediately; otherwise, queue the action.
+function executeOrQueue(action) {
+  if (bot && bot._client && bot._client.socket && bot._client.socket.writable) {
+    try {
+      action();
+    } catch (err) {
+      console.error("Error executing action:", err.message);
+    }
+  } else {
+    pendingActions.push(action);
+  }
 }
 
-// Send chat messages to Discord
-async function sendChatMessage(username, message) {
-  queuePacket('chatWebhook', { embeds: [{ author: { name: username }, description: message, color: 0x00ff00, timestamp: new Date().toISOString() }] });
+// Flush queued actions when the bot is connected
+function flushPendingActions() {
+  while (pendingActions.length > 0) {
+    const action = pendingActions.shift();
+    try {
+      action();
+    } catch (err) {
+      console.error("Error executing queued action:", err.message);
+    }
+  }
 }
 
-// Patch packet sending for error handling
+// --- Patch Bot's Packet Sending ---
+// Wrap the underlying packet sending to catch errors and queue packets for later.
 function patchPacketSending() {
   if (!bot || !bot._client) return;
   const originalWrite = bot._client.write.bind(bot._client);
-  
-  bot._client.write = function (packetName, data) {
+  bot._client.write = function(packetName, data) {
     try {
       originalWrite(packetName, data);
     } catch (err) {
-      console.error("Packet sending error:", packetName, ":", err.message);
-      queuePacket(packetName, data); // Requeue packet
+      console.error("Packet sending error for", packetName, ":", err.message);
+      queuePacket(packetName, data); // Requeue the packet if sending fails
     }
   };
-
+  // Optional: Catch errors on incoming packets
   bot._client.on('data', (data) => {
     try {
-      // Let mineflayer handle the packet normally
+      // Let mineflayer handle the packet normally.
     } catch (err) {
       console.error("Packet receiving error:", err.message);
     }
   });
 }
 
-// Update bot look direction
+// --- Discord Functions ---
+// These functions use axios to send webhooks and are not packet queued.
+async function sendEmbed(title, description, color = 0x3498db, fields = []) {
+  try {
+    await axios.post(discordWebhook, {
+      embeds: [{
+        title,
+        description,
+        color,
+        fields,
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error('❌ Webhook Error:', err.message);
+  }
+}
+
+async function sendChatMessage(username, message) {
+  try {
+    await axios.post(chatWebhook, {
+      embeds: [{
+        author: { name: username },
+        description: message,
+        color: 0x00ff00,
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error('❌ Chat Webhook Error:', err.message);
+  }
+}
+
+// --- Bot Actions ---
 function updateLookDirection() {
   if (!bot || !bot.entity) return;
   try {
     const playerEntity = bot.nearestEntity(entity => entity.type === 'player');
     if (playerEntity) {
       const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-      queuePacket('look', pos);
+      // Use executeOrQueue to ensure the action is attempted only if the connection is ready.
+      executeOrQueue(() => {
+        bot.lookAt(pos);
+      });
     }
   } catch (err) {
     console.error("Error updating look direction:", err.message);
   }
 }
 
-// Start the bot
+function moveRandomly() {
+  if (!bot.entity) return;
+  try {
+    const x = Math.floor(Math.random() * 10 - 5);
+    const z = Math.floor(Math.random() * 10 - 5);
+    const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
+    executeOrQueue(() => {
+      bot.pathfinder.setGoal(goal);
+    });
+    if (Math.random() > 0.7) {
+      executeOrQueue(() => {
+        bot.setControlState('jump', true);
+        setTimeout(() => {
+          bot.setControlState('jump', false);
+        }, 500);
+      });
+    }
+  } catch (err) {
+    console.error("Error in moveRandomly:", err.message);
+  }
+}
+
+function preventAfk() {
+  try {
+    executeOrQueue(() => {
+      bot.swingArm();
+    });
+    executeOrQueue(() => {
+      bot.setControlState('sneak', true);
+      setTimeout(() => {
+        bot.setControlState('sneak', false);
+      }, Math.random() * 1000 + 500);
+    });
+  } catch (err) {
+    console.error("Error in preventAfk:", err.message);
+  }
+}
+
+// Helper wrapper to safely execute bot actions
+function safeBotAction(action) {
+  try {
+    if (bot) action();
+  } catch (err) {
+    console.error(`⚠️ Error in function ${action.name}:`, err.message);
+  }
+}
+
+// --- Bot Creation and Lifecycle ---
 function startBot() {
+  // Clear previous intervals
   if (lookInterval) clearInterval(lookInterval);
   if (moveInterval) clearInterval(moveInterval);
   if (afkInterval) clearInterval(afkInterval);
@@ -102,11 +208,17 @@ function startBot() {
   bot.once('spawn', () => {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
-    patchPacketSending();
 
-    lookInterval = setInterval(updateLookDirection, 5000);
-    moveInterval = setInterval(moveRandomly, 5000);
-    afkInterval = setInterval(preventAfk, 60000 + Math.random() * 10000);
+    // Patch packet sending to wrap all low-level writes with our queuing
+    patchPacketSending();
+    // Flush any actions or packets queued during downtime
+    flushPendingActions();
+    processPacketQueue();
+
+    // Start periodic actions
+    lookInterval = setInterval(() => safeBotAction(updateLookDirection), 5000);
+    moveInterval = setInterval(() => safeBotAction(moveRandomly), 5000);
+    afkInterval = setInterval(() => safeBotAction(preventAfk), 60000 + Math.random() * 10000);
   });
 
   bot.on('end', (reason) => {
@@ -124,20 +236,21 @@ function startBot() {
   bot.on('error', (err) => {
     console.error(`❌ Bot error: ${err.message}`);
     if (err.code === 'ECONNRESET') {
+      console.log("🔄 Attempting to reconnect...");
       reconnectBot();
     }
   });
 
-  bot.on('chat', (username, message) => sendChatMessage(username, message));
-  bot.on('playerJoined', (player) => playerJoinHandler(player));
-  bot.on('playerLeft', (player) => playerLeaveHandler(player));
+  bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
+  bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
+  bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
 }
 
-// Reconnect the bot
 function reconnectBot() {
-  if (lookInterval) clearInterval(lookInterval);
-  if (moveInterval) clearInterval(moveInterval);
-  if (afkInterval) clearInterval(afkInterval);
+  // Clear intervals
+  if (lookInterval) { clearInterval(lookInterval); lookInterval = null; }
+  if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
+  if (afkInterval) { clearInterval(afkInterval); afkInterval = null; }
 
   if (reconnectTimeout) return;
 
@@ -148,7 +261,6 @@ function reconnectBot() {
   }, 30000);
 }
 
-// Handle player joining
 function playerJoinHandler(player) {
   const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
   sendEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
@@ -156,7 +268,6 @@ function playerJoinHandler(player) {
   ]);
 }
 
-// Handle player leaving
 function playerLeaveHandler(player) {
   const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0;
   sendEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
@@ -164,43 +275,7 @@ function playerLeaveHandler(player) {
   ]);
 }
 
-// Move randomly
-function moveRandomly() {
-  if (!bot.entity) return;
-  try {
-    const x = Math.floor(Math.random() * 10 - 5);
-    const z = Math.floor(Math.random() * 10 - 5);
-    const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
-    queuePacket('move', { x, y: bot.entity.position.y, z });
-    bot.pathfinder.setGoal(goal);
-
-    if (Math.random() > 0.7) {
-      queuePacket('jump', {});
-      bot.setControlState('jump', true);
-      setTimeout(() => bot.setControlState('jump', false), 500);
-    }
-  } catch (err) {
-    console.error("Error in moveRandomly:", err.message);
-  }
-}
-
-// Prevent AFK kicks
-function preventAfk() {
-  try {
-    queuePacket('swing', {});
-    bot.swingArm();
-    queuePacket('sneak', { state: true });
-    bot.setControlState('sneak', true);
-    setTimeout(() => {
-      queuePacket('sneak', { state: false });
-      bot.setControlState('sneak', false);
-    }, Math.random() * 1000 + 500);
-  } catch (err) {
-    console.error("Error in preventAfk:", err.message);
-  }
-}
-
-// Web server for monitoring
+// --- Web Monitoring Server ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -218,5 +293,5 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-// Start bot
+// --- Start the Bot ---
 startBot();
