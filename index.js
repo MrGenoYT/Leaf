@@ -158,6 +158,15 @@ function preventAfk() {
   }), 60000 + Math.random() * 10000);
 }
 
+// Make the bot look at the nearest player
+function lookAtNearestPlayer() {
+  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
+  if (!playerEntity) return;
+
+  const pos = playerEntity.position.offset(0, playerEntity.height, 0);
+  bot.lookAt(pos);
+}
+
 // Web monitoring server
 const app = express();
 const PORT = process.env.PORT || 3000;
