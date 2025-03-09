@@ -1,4 +1,4 @@
-// LookAtBOT
+// LookAtBOT - Advanced Error Handling & Keep Alive
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -9,7 +9,7 @@ const botOptions = {
   host: 'bataksurvival.aternos.me',
   port: 12032,
   username: 'lookAt',
-  connectTimeout: 120000,
+  connectTimeout: 300000,
 };
 
 const discordWebhook = 'https://discord.com/api/webhooks/1348283775930470492/03Z_3or9YY6uMB-1ANCEpBG229tHbM8_uYORdptwdm_5uraEewp69eHmj1m73GbYUzVD';
@@ -22,13 +22,7 @@ let reconnectTimeout = null;
 async function sendEmbed(title, description, color = 0x3498db, fields = []) {
   try {
     await axios.post(discordWebhook, {
-      embeds: [{
-        title,
-        description,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-      }],
+      embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
     console.error('❌ Webhook Error:', err.message);
@@ -39,12 +33,7 @@ async function sendEmbed(title, description, color = 0x3498db, fields = []) {
 async function sendChatMessage(username, message) {
   try {
     await axios.post(chatWebhook, {
-      embeds: [{
-        author: { name: username },
-        description: message,
-        color: 0x00ff00,
-        timestamp: new Date().toISOString(),
-      }],
+      embeds: [{ author: { name: username }, description: message, color: 0x00ff00, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
     console.error('❌ Chat Webhook Error:', err.message);
@@ -63,8 +52,9 @@ function startBot() {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
     
-    setTimeout(preventAfk, 5000); // Delay to ensure bot is ready
+    setTimeout(preventAfk, 5000); // Ensure bot is ready
     setTimeout(moveRandomly, 5000);
+    setInterval(sendKeepAlive, 30000); // Send keep-alive packets every 30 seconds
   });
 
   bot.on('end', (reason) => {
@@ -81,7 +71,7 @@ function startBot() {
 
   bot.on('error', (err) => {
     console.error(`❌ Bot error: ${err.message}`);
-    if (err.code === 'ECONNRESET') {
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED') {
       console.log("🔄 Attempting to reconnect...");
       reconnectBot();
     }
@@ -107,11 +97,10 @@ function reconnectBot() {
   if (reconnectTimeout) return;
 
   console.log("🔄 Reconnecting in 30 seconds...");
-  
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 30000); // Increased reconnect delay to prevent frequent rejoining
+  }, 30000); // Prevent frequent rejoining
 }
 
 // Handle player joining
@@ -134,7 +123,7 @@ function playerLeaveHandler(player) {
 function moveRandomly() {
   setInterval(() => safeBotAction(() => {
     if (!bot.entity) return;
-    
+
     const x = Math.floor(Math.random() * 10 - 5);
     const z = Math.floor(Math.random() * 10 - 5);
     const goal = new goals.GoalBlock(bot.entity.position.x + x, bot.entity.position.y, bot.entity.position.z + z);
@@ -158,13 +147,20 @@ function preventAfk() {
   }), 60000 + Math.random() * 10000);
 }
 
-// Make the bot look at the nearest player
+// Make the bot look at the nearest player within 100 blocks
 function lookAtNearestPlayer() {
-  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player');
+  const playerEntity = bot?.nearestEntity((entity) => entity.type === 'player' && bot.entity.position.distanceTo(entity.position) <= 100);
   if (!playerEntity) return;
 
   const pos = playerEntity.position.offset(0, playerEntity.height, 0);
   bot.lookAt(pos);
+}
+
+// Send keep-alive packets
+function sendKeepAlive() {
+  safeBotAction(() => {
+    bot._client.write('keep_alive', { keepAliveId: BigInt(Date.now()) });
+  });
 }
 
 // Web monitoring server
