@@ -1,4 +1,4 @@
-// LookAtBOT
+// LookATBOT
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -12,8 +12,9 @@ const botOptions = {
   connectTimeout: null,
 };
 
-const discordWebhook = 'https://discord.com/api/webhooks/1348283775930470492/03Z_3or9YY6uMB-1ANCEpBG229tHbM8_uYORdptwdm_5uraEewp69eHmj1m73GbYUzVD';
-const chatWebhook = 'https://discord.com/api/webhooks/1348283959473213462/UA2lue2vWNaGLZesYGYKsKmY5WtqT3I2pnLNlA96YQCmR8-CeN71ShSLWRAWLWYnGkTZ';
+// Use environment variables for webhooks instead of hardcoded URLs
+const discordWebhook = process.env.DISCORD_WEBHOOK;
+const chatWebhook = process.env.CHAT_WEBHOOK;
 
 let bot = null;
 let reconnectTimeout = null;
@@ -129,20 +130,26 @@ async function sendChatMessage(username, message) {
 }
 
 // --- Bot Actions ---
-function updateLookDirection() {
+
+// New function: rotateHead - rotates the bot's head 360° smoothly over 1 second.
+// This replaces the previous behavior of looking at the nearest player.
+function rotateHead() {
   if (!bot || !bot.entity) return;
-  try {
-    const playerEntity = bot.nearestEntity(entity => entity.type === 'player');
-    if (playerEntity) {
-      const pos = playerEntity.position.offset(0, playerEntity.height, 0);
-      // Use executeOrQueue to ensure the action is attempted only if the connection is ready.
-      executeOrQueue(() => {
-        bot.lookAt(pos);
-      });
+  const duration = 1000; // duration of rotation in ms
+  const steps = 20;
+  const intervalTime = duration / steps;
+  let step = 0;
+  const initialYaw = bot.entity.yaw;
+  const targetYaw = initialYaw + 2 * Math.PI; // full rotation
+  const rotateInterval = setInterval(() => {
+    if (step >= steps) {
+      clearInterval(rotateInterval);
+    } else {
+      const newYaw = initialYaw + ((targetYaw - initialYaw) * (step / steps));
+      bot.look(newYaw, bot.entity.pitch, false);
+      step++;
     }
-  } catch (err) {
-    console.error("Error updating look direction:", err.message);
-  }
+  }, intervalTime);
 }
 
 function moveRandomly() {
@@ -192,6 +199,21 @@ function safeBotAction(action) {
   }
 }
 
+// --- Error Handling Steps ---
+// Basic error handling
+function basicErrorHandler(err) {
+  console.error(`Basic error handling: ${err.message}`);
+}
+
+// Advanced error handling
+function advancedErrorHandler(err) {
+  console.error(`Advanced error handling: ${err.stack}`);
+  if (err.message && (err.message.includes("timed out after 30000 milliseconds") || err.code === 'ECONNRESET')) {
+    console.log("Network error detected, attempting to reconnect...");
+    reconnectBot();
+  }
+}
+
 // --- Bot Creation and Lifecycle ---
 function startBot() {
   // Clear previous intervals
@@ -215,8 +237,17 @@ function startBot() {
     flushPendingActions();
     processPacketQueue();
 
-    // Start periodic actions
-    lookInterval = setInterval(() => safeBotAction(updateLookDirection), 5000);
+    // Set keep-alive on the socket to maintain connection
+    if (bot._client && bot._client.socket) {
+      bot._client.socket.setKeepAlive(true, 30000);
+      bot._client.socket.on('close', (hadError) => {
+        console.log("Socket closed", hadError ? "with error" : "normally");
+      });
+    }
+
+    // Start periodic actions:
+    // Rotate head every 5 minutes (300000 ms)
+    lookInterval = setInterval(() => safeBotAction(rotateHead), 300000);
     moveInterval = setInterval(() => safeBotAction(moveRandomly), 5000);
     afkInterval = setInterval(() => safeBotAction(preventAfk), 60000 + Math.random() * 10000);
   });
@@ -224,21 +255,22 @@ function startBot() {
   bot.on('end', (reason) => {
     console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
     sendEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
+    // Clear packetQueue on disconnect to prevent memory leaks
+    packetQueue = [];
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
     console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
     sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
+    // Clear packetQueue on disconnect to prevent memory leaks
+    packetQueue = [];
     reconnectBot();
   });
 
   bot.on('error', (err) => {
-    console.error(`❌ Bot error: ${err.message}`);
-    if (err.code === 'ECONNRESET') {
-      console.log("🔄 Attempting to reconnect...");
-      reconnectBot();
-    }
+    basicErrorHandler(err);
+    advancedErrorHandler(err);
   });
 
   bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
