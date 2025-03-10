@@ -286,11 +286,11 @@ function reconnectBot() {
 
   if (reconnectTimeout) return;
 
-  console.log("🔄 Reconnecting in 30 seconds...");
+  console.log("🔄 Reconnecting in 20 seconds...");
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 30000);
+  }, 20000);
 }
 
 function playerJoinHandler(player) {
