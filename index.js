@@ -6,8 +6,8 @@ const express = require('express');
 
 // Server Details
 const botOptions = {
-  host: 'bataksurvival.aternos.me',
-  port: 12032,
+  host: 'ankit_me-oBUx.aternos.me',
+  port: 35229,
   username: 'lookAt',
   connectTimeout: null,
 };
