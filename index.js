@@ -176,9 +176,7 @@ function moveRandomly() {
 
 function preventAfk() {
   try {
-    executeOrQueue(() => {
-      bot.swingArm();
-    });
+    // Swinging arm feature removed.
     executeOrQueue(() => {
       bot.setControlState('sneak', true);
       setTimeout(() => {
