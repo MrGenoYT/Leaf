@@ -18,20 +18,16 @@ const chatWebhook = process.env.CHAT_WEBHOOK;
 
 let bot = null;
 let reconnectTimeout = null;
-let lookInterval = null;
 let moveInterval = null;
-let afkInterval = null;
 let pendingActions = [];   // Actions to execute when bot is ready
 let packetQueue = [];      // Low-level packet actions to retry
 
 // --- Packet Queueing Functions ---
-// Call this to queue a packet action
 function queuePacket(packetName, data) {
   packetQueue.push({ packetName, data });
   processPacketQueue();
 }
 
-// Attempt to flush queued packets if connection is active
 function processPacketQueue() {
   if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) return;
   while (packetQueue.length > 0) {
@@ -40,7 +36,6 @@ function processPacketQueue() {
       bot._client.write(packetName, data);
     } catch (err) {
       console.error("Error sending queued packet", packetName, ":", err.message);
-      // Put it back at the front and break the loop to retry later
       packetQueue.unshift({ packetName, data });
       break;
     }
@@ -48,7 +43,6 @@ function processPacketQueue() {
 }
 
 // --- Execute or Queue Actions ---
-// If the bot connection is ready, execute immediately; otherwise, queue the action.
 function executeOrQueue(action) {
   if (bot && bot._client && bot._client.socket && bot._client.socket.writable) {
     try {
@@ -61,7 +55,6 @@ function executeOrQueue(action) {
   }
 }
 
-// Flush queued actions when the bot is connected
 function flushPendingActions() {
   while (pendingActions.length > 0) {
     const action = pendingActions.shift();
@@ -74,7 +67,6 @@ function flushPendingActions() {
 }
 
 // --- Patch Bot's Packet Sending ---
-// Wrap the underlying packet sending to catch errors and queue packets for later.
 function patchPacketSending() {
   if (!bot || !bot._client) return;
   const originalWrite = bot._client.write.bind(bot._client);
@@ -83,10 +75,9 @@ function patchPacketSending() {
       originalWrite(packetName, data);
     } catch (err) {
       console.error("Packet sending error for", packetName, ":", err.message);
-      queuePacket(packetName, data); // Requeue the packet if sending fails
+      queuePacket(packetName, data);
     }
   };
-  // Optional: Catch errors on incoming packets
   bot._client.on('data', (data) => {
     try {
       // Let mineflayer handle the packet normally.
@@ -97,7 +88,6 @@ function patchPacketSending() {
 }
 
 // --- Discord Functions ---
-// These functions use axios to send webhooks and are not packet queued.
 async function sendEmbed(title, description, color = 0x3498db, fields = []) {
   try {
     await axios.post(discordWebhook, {
@@ -130,28 +120,7 @@ async function sendChatMessage(username, message) {
 }
 
 // --- Bot Actions ---
-
-// New function: rotateHead - rotates the bot's head 360° smoothly over 1 second.
-// This replaces the previous behavior of looking at the nearest player.
-function rotateHead() {
-  if (!bot || !bot.entity) return;
-  const duration = 1000; // duration of rotation in ms
-  const steps = 20;
-  const intervalTime = duration / steps;
-  let step = 0;
-  const initialYaw = bot.entity.yaw;
-  const targetYaw = initialYaw + 2 * Math.PI; // full rotation
-  const rotateInterval = setInterval(() => {
-    if (step >= steps) {
-      clearInterval(rotateInterval);
-    } else {
-      const newYaw = initialYaw + ((targetYaw - initialYaw) * (step / steps));
-      bot.look(newYaw, bot.entity.pitch, false);
-      step++;
-    }
-  }, intervalTime);
-}
-
+// This function handles walking and occasionally jumping.
 function moveRandomly() {
   if (!bot.entity) return;
   try {
@@ -174,20 +143,6 @@ function moveRandomly() {
   }
 }
 
-function preventAfk() {
-  try {
-    // Swinging arm feature removed.
-    executeOrQueue(() => {
-      bot.setControlState('sneak', true);
-      setTimeout(() => {
-        bot.setControlState('sneak', false);
-      }, Math.random() * 1000 + 500);
-    });
-  } catch (err) {
-    console.error("Error in preventAfk:", err.message);
-  }
-}
-
 // Helper wrapper to safely execute bot actions
 function safeBotAction(action) {
   try {
@@ -198,12 +153,10 @@ function safeBotAction(action) {
 }
 
 // --- Error Handling Steps ---
-// Basic error handling
 function basicErrorHandler(err) {
   console.error(`Basic error handling: ${err.message}`);
 }
 
-// Advanced error handling
 function advancedErrorHandler(err) {
   console.error(`Advanced error handling: ${err.stack}`);
   if (err.message && (err.message.includes("timed out after 30000 milliseconds") || err.code === 'ECONNRESET')) {
@@ -214,11 +167,7 @@ function advancedErrorHandler(err) {
 
 // --- Bot Creation and Lifecycle ---
 function startBot() {
-  // Clear previous intervals
-  if (lookInterval) clearInterval(lookInterval);
   if (moveInterval) clearInterval(moveInterval);
-  if (afkInterval) clearInterval(afkInterval);
-
   if (bot) bot.removeAllListeners();
   console.log("🔄 Starting the bot...");
 
@@ -229,13 +178,10 @@ function startBot() {
     console.log('✅ Bot joined the server!');
     sendEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
 
-    // Patch packet sending to wrap all low-level writes with our queuing
     patchPacketSending();
-    // Flush any actions or packets queued during downtime
     flushPendingActions();
     processPacketQueue();
 
-    // Set keep-alive on the socket to maintain connection
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
@@ -243,17 +189,13 @@ function startBot() {
       });
     }
 
-    // Start periodic actions:
-    // Rotate head every 5 minutes (300000 ms)
-    lookInterval = setInterval(() => safeBotAction(rotateHead), 300000);
+    // Start periodic actions: only walking and jumping are allowed.
     moveInterval = setInterval(() => safeBotAction(moveRandomly), 5000);
-    afkInterval = setInterval(() => safeBotAction(preventAfk), 60000 + Math.random() * 10000);
   });
 
   bot.on('end', (reason) => {
     console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
     sendEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
-    // Clear packetQueue on disconnect to prevent memory leaks
     packetQueue = [];
     reconnectBot();
   });
@@ -261,7 +203,6 @@ function startBot() {
   bot.on('kicked', (reason) => {
     console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
     sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
-    // Clear packetQueue on disconnect to prevent memory leaks
     packetQueue = [];
     reconnectBot();
   });
@@ -277,13 +218,8 @@ function startBot() {
 }
 
 function reconnectBot() {
-  // Clear intervals
-  if (lookInterval) { clearInterval(lookInterval); lookInterval = null; }
   if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
-  if (afkInterval) { clearInterval(afkInterval); afkInterval = null; }
-
   if (reconnectTimeout) return;
-
   console.log("🔄 Reconnecting in 10 seconds...");
   reconnectTimeout = setTimeout(() => {
     startBot();
@@ -323,5 +259,4 @@ app.listen(PORT, () => {
   console.log(`🌐 Web server running on port ${PORT}`);
 });
 
-// --- Start the Bot ---
 startBot();
