@@ -208,11 +208,12 @@ function startBot() {
   });
 
   bot.on('kicked', (reason) => {
-    console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
-    sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
-    packetQueue = [];
-    reconnectBot();
-  });
+  const reasonText = typeof reason === 'object' ? JSON.stringify(reason) : reason;
+  console.log(`🚫 Bot was kicked: ${reasonText}. Reconnecting...`);
+  sendEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reasonText}.`, 0xff0000);
+  packetQueue = [];
+  reconnectBot();
+});
 
   bot.on('error', (err) => {
     console.error(`❌ Bot encountered an error: ${err.message}`);
