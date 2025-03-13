@@ -1,9 +1,8 @@
-// LookAtBOT
+// LookATBOT
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
-const os = require('os');
 
 // Server Details
 const botOptions = {
@@ -22,8 +21,6 @@ let reconnectTimeout = null;
 let moveInterval = null;
 let pendingActions = [];   // Actions to execute when bot is ready
 let packetQueue = [];      // Low-level packet actions to retry
-let botStartTime = null;   // Record when bot successfully spawns
-let playerJoinTimes = {};  // Track when players join
 
 // --- Packet Queueing Functions ---
 function queuePacket(packetName, data) {
@@ -103,7 +100,7 @@ async function sendEmbed(title, description, color = 0x3498db, fields = []) {
       }],
     });
   } catch (err) {
-    console.error('❌ Webhook Error:', err.message);
+    console.error('âŒ Webhook Error:', err.message);
   }
 }
 
@@ -118,7 +115,7 @@ async function sendChatMessage(username, message) {
       }],
     });
   } catch (err) {
-    console.error('❌ Chat Webhook Error:', err.message);
+    console.error('âŒ Chat Webhook Error:', err.message);
   }
 }
 
@@ -151,7 +148,7 @@ function safeBotAction(action) {
   try {
     if (bot) action();
   } catch (err) {
-    console.error(`⚠️ Error in function ${action.name}:`, err.message);
+    console.error(`âš ï¸ Error in function ${action.name}:`, err.message);
   }
 }
 
@@ -162,11 +159,8 @@ function basicErrorHandler(err) {
 
 function advancedErrorHandler(err) {
   console.error(`Advanced error handling: ${err.stack}`);
-  // Check for timeout, connection reset, or "Logged in from another location" errors
-  if (err.message && (err.message.includes("timed out after 30000 milliseconds") ||
-      err.code === 'ECONNRESET' ||
-      err.message.includes("Logged in from another location"))) {
-    console.log("Network/login error detected, attempting to reconnect...");
+  if (err.message && (err.message.includes("timed out after 30000 milliseconds") || err.code === 'ECONNRESET')) {
+    console.log("Network error detected, attempting to reconnect...");
     reconnectBot();
   }
 }
@@ -175,15 +169,15 @@ function advancedErrorHandler(err) {
 function startBot() {
   if (moveInterval) clearInterval(moveInterval);
   if (bot) bot.removeAllListeners();
-  console.log("🔄 Starting the bot...");
+  console.log("ðŸ”„ Starting the bot...");
 
   bot = mineflayer.createBot(botOptions);
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
-    botStartTime = Date.now();
-    console.log('✅ Bot joined the server!');
-    sendEmbed('✅ Bot Live', 'LookAtBOT has started and joined the server.', 0x00ff00);
+    console.log('âœ… Bot joined the server!');
+    sendEmbed('âœ… LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
+
     patchPacketSending();
     flushPendingActions();
     processPacketQueue();
@@ -195,20 +189,20 @@ function startBot() {
       });
     }
 
-    // Start periodic actions: walking and jumping.
+    // Start periodic actions: only walking and jumping are allowed.
     moveInterval = setInterval(() => safeBotAction(moveRandomly), 5000);
   });
 
   bot.on('end', (reason) => {
-    console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
-    sendEmbed('⚠️ Bot Disconnected', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
+    console.log(`âš ï¸ Bot disconnected: ${reason}. Attempting to reconnect...`);
+    sendEmbed('âš ï¸ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
     packetQueue = [];
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
-    console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
-    sendEmbed('🚫 Bot Kicked', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
+    console.log(`ðŸš« Bot was kicked: ${reason}. Reconnecting...`);
+    sendEmbed('ðŸš« LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
     packetQueue = [];
     reconnectBot();
   });
@@ -219,7 +213,6 @@ function startBot() {
   });
 
   bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
-
   bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
   bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
 }
@@ -227,7 +220,7 @@ function startBot() {
 function reconnectBot() {
   if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
   if (reconnectTimeout) return;
-  console.log("🔄 Reconnecting in 10 seconds...");
+  console.log("ðŸ”„ Reconnecting in 10 seconds...");
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
@@ -235,67 +228,18 @@ function reconnectBot() {
 }
 
 function playerJoinHandler(player) {
-  // Record the join time for this player
-  playerJoinTimes[player.username] = Date.now();
   const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-  sendEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
+  sendEmbed('ðŸ‘¤ Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
 }
 
 function playerLeaveHandler(player) {
-  // Remove the player's join time on leaving
-  delete playerJoinTimes[player.username];
-  const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-  sendEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
+  const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0;
+  sendEmbed('ðŸšª Player Left', `**${player.username}** left the game.`, 0xff4500, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
 }
-
-// --- Periodic Discord Notifications ---
-
-// Every 15 minutes, send a list of players with their play duration
-function sendPlayerList() {
-  let fields = [];
-  const now = Date.now();
-  for (let username in playerJoinTimes) {
-    const durationMs = now - playerJoinTimes[username];
-    let seconds = Math.floor(durationMs / 1000);
-    let minutes = Math.floor(seconds / 60);
-    let hours = Math.floor(minutes / 60);
-    seconds %= 60;
-    minutes %= 60;
-    const durationStr = `${hours}h ${minutes}m ${seconds}s`;
-    fields.push({ name: username, value: durationStr, inline: true });
-  }
-  if (fields.length === 0) {
-    fields.push({ name: 'No players online', value: 'N/A' });
-  }
-  sendEmbed('👥 Player List', 'Current players and play duration:', 0x3498db, fields);
-}
-setInterval(sendPlayerList, 15 * 60 * 1000); // every 15 minutes
-
-// Every 30 minutes, send a status update
-function sendStatusUpdate() {
-  const serverUptime = process.uptime(); // in seconds
-  const botUptime = botStartTime ? (Date.now() - botStartTime) / 1000 : 0;
-  const playersCount = bot && bot.players ? Object.keys(bot.players).length : 0;
-  const memoryUsage = process.memoryUsage();
-  const usedMemMB = (memoryUsage.heapUsed / 1024 / 1024).toFixed(2);
-  const totalMemMB = (memoryUsage.heapTotal / 1024 / 1024).toFixed(2);
-  const loadAvg = os.loadavg()[0].toFixed(2); // 1-minute load average
-  const ping = bot ? bot.ping : 'N/A';
-  const fields = [
-    { name: 'Server Uptime', value: `${Math.floor(serverUptime)}s`, inline: true },
-    { name: 'Bot Uptime', value: `${Math.floor(botUptime)}s`, inline: true },
-    { name: 'Ping', value: `${ping}ms`, inline: true },
-    { name: 'Players', value: `${playersCount}`, inline: true },
-    { name: 'Memory Usage', value: `${usedMemMB}MB / ${totalMemMB}MB`, inline: true },
-    { name: 'Load Average', value: `${loadAvg}`, inline: true },
-  ];
-  sendEmbed('🛠 Status Update', 'Current bot and server status:', 0x9b59b6, fields);
-}
-setInterval(sendStatusUpdate, 30 * 60 * 1000); // every 30 minutes
 
 // --- Web Monitoring Server ---
 const app = express();
@@ -304,15 +248,15 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   try {
     const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-    res.json({ message: "✅ Bot is running!", onlinePlayers });
+    res.json({ message: "âœ… Bot is running!", onlinePlayers });
   } catch (err) {
-    console.error('⚠️ Error in web server route:', err.message);
+    console.error('âš ï¸ Error in web server route:', err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
+  console.log(`ðŸŒ Web server running on port ${PORT}`);
 });
 
 startBot();
