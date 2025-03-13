@@ -3,6 +3,7 @@ const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const express = require('express');
+const os = require('os'); // added for system metrics
 
 // Server Details
 const botOptions = {
@@ -21,6 +22,21 @@ let reconnectTimeout = null;
 let moveInterval = null;
 let pendingActions = [];   // Actions to execute when bot is ready
 let packetQueue = [];      // Low-level packet actions to retry
+
+// New globals for the periodic status and player list
+let playerJoinTimes = {};  // Record when each player joined
+let botStartTime = null;   // When the bot spawned (for uptime)
+let playerListInterval = null; // Interval for sending player list every 15 minutes
+let statusInterval = null;     // Interval for sending status every 30 minutes
+
+// --- Utility function to format duration (ms to "Hh Mm Ss") ---
+function formatDuration(ms) {
+  let totalSeconds = Math.floor(ms / 1000);
+  let hours = Math.floor(totalSeconds / 3600);
+  let minutes = Math.floor((totalSeconds % 3600) / 60);
+  let seconds = totalSeconds % 60;
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
 
 // --- Packet Queueing Functions ---
 function queuePacket(packetName, data) {
@@ -100,7 +116,7 @@ async function sendEmbed(title, description, color = 0x3498db, fields = []) {
       }],
     });
   } catch (err) {
-    console.error('âŒ Webhook Error:', err.message);
+    console.error('❌ Webhook Error:', err.message);
   }
 }
 
@@ -115,7 +131,7 @@ async function sendChatMessage(username, message) {
       }],
     });
   } catch (err) {
-    console.error('âŒ Chat Webhook Error:', err.message);
+    console.error('❌ Chat Webhook Error:', err.message);
   }
 }
 
@@ -148,7 +164,7 @@ function safeBotAction(action) {
   try {
     if (bot) action();
   } catch (err) {
-    console.error(`âš ï¸ Error in function ${action.name}:`, err.message);
+    console.error(`⚠️ Error in function ${action.name}:`, err.message);
   }
 }
 
@@ -169,14 +185,22 @@ function advancedErrorHandler(err) {
 function startBot() {
   if (moveInterval) clearInterval(moveInterval);
   if (bot) bot.removeAllListeners();
-  console.log("ðŸ”„ Starting the bot...");
+  console.log("🔄 Starting the bot...");
 
   bot = mineflayer.createBot(botOptions);
   bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
-    console.log('âœ… Bot joined the server!');
-    sendEmbed('âœ… LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
+    botStartTime = Date.now();
+    // Record join times for players already online
+    for (const username in bot.players) {
+      if (!playerJoinTimes[username]) {
+        playerJoinTimes[username] = Date.now();
+      }
+    }
+    console.log('✅ Bot joined the server!');
+    // Notify Discord with "ok discord" when bot joins
+    sendEmbed('Bot has joined the server.', 0x00ff00);
 
     patchPacketSending();
     flushPendingActions();
@@ -191,18 +215,66 @@ function startBot() {
 
     // Start periodic actions: only walking and jumping are allowed.
     moveInterval = setInterval(() => safeBotAction(moveRandomly), 5000);
+
+    // Start 15-minute interval to send player list with play durations
+    playerListInterval = setInterval(() => {
+      const now = Date.now();
+      let fields = [];
+      for (const username in bot.players) {
+        const joinTime = playerJoinTimes[username] || now;
+        const durationMs = now - joinTime;
+        const durationStr = formatDuration(durationMs);
+        fields.push({ name: username, value: durationStr, inline: true });
+      }
+      if (fields.length === 0) {
+        fields.push({ name: 'No players online', value: '-', inline: false });
+      }
+      sendEmbed('Player Play Durations', 'List of players and their play durations:', 0x3498db, fields);
+    }, 15 * 60 * 1000);
+
+    // Start 30-minute interval to send status update
+    statusInterval = setInterval(() => {
+      const now = Date.now();
+      const uptime = formatDuration(now - botStartTime);
+      // Server uptime is not tracked so we mark it as 'N/A'
+      const serverUptime = 'N/A';
+      const botPing = (bot.ping !== undefined ? bot.ping : 'N/A');
+      const serverPing = 'N/A';
+      const cpuLoad = os.loadavg()[0].toFixed(2);
+      const memoryUsage = process.memoryUsage();
+      const memoryUsedMB = (memoryUsage.rss / (1024 * 1024)).toFixed(2);
+      const heapUsedMB = (memoryUsage.heapUsed / (1024 * 1024)).toFixed(2);
+      const heapTotalMB = (memoryUsage.heapTotal / (1024 * 1024)).toFixed(2);
+
+      const fields = [
+        { name: 'Bot Uptime', value: uptime, inline: true },
+        { name: 'Server Uptime', value: serverUptime, inline: true },
+        { name: 'Bot Ping', value: String(botPing), inline: true },
+        { name: 'Server Ping', value: serverPing, inline: true },
+        { name: 'CPU Load (1m avg)', value: `${cpuLoad}`, inline: true },
+        { name: 'Memory (RSS)', value: `${memoryUsedMB} MB`, inline: true },
+        { name: 'Heap Used/Total', value: `${heapUsedMB}/${heapTotalMB} MB`, inline: true }
+      ];
+      sendEmbed('Status Update', 'Periodic status update:', 0x3498db, fields);
+    }, 30 * 60 * 1000);
   });
 
   bot.on('end', (reason) => {
-    console.log(`âš ï¸ Bot disconnected: ${reason}. Attempting to reconnect...`);
-    sendEmbed('âš ï¸ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
+    console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
+    // Notify Discord with "ok discord" when bot disconnects
+    sendEmbed('Bot has disconnected.', 0xff0000);
+    // Clear our custom intervals so they don’t pile up on reconnect
+    if (playerListInterval) { clearInterval(playerListInterval); playerListInterval = null; }
+    if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     packetQueue = [];
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
-    console.log(`ðŸš« Bot was kicked: ${reason}. Reconnecting...`);
-    sendEmbed('ðŸš« LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
+    console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
+    sendEmbed('Bot was kicked.', 0xff0000);
+    if (playerListInterval) { clearInterval(playerListInterval); playerListInterval = null; }
+    if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     packetQueue = [];
     reconnectBot();
   });
@@ -220,7 +292,7 @@ function startBot() {
 function reconnectBot() {
   if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
   if (reconnectTimeout) return;
-  console.log("ðŸ”„ Reconnecting in 10 seconds...");
+  console.log("🔄 Reconnecting in 10 seconds...");
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
@@ -228,15 +300,19 @@ function reconnectBot() {
 }
 
 function playerJoinHandler(player) {
+  // Record the join time for calculating play duration later
+  playerJoinTimes[player.username] = Date.now();
   const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-  sendEmbed('ðŸ‘¤ Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
+  sendEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
 }
 
 function playerLeaveHandler(player) {
+  // Optionally, you can remove the player's join time or keep it for historical data.
+  delete playerJoinTimes[player.username];
   const onlinePlayers = bot?.players ? Object.keys(bot.players).length - 1 : 0;
-  sendEmbed('ðŸšª Player Left', `**${player.username}** left the game.`, 0xff4500, [
+  sendEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
     { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
   ]);
 }
@@ -248,15 +324,15 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   try {
     const onlinePlayers = bot?.players ? Object.keys(bot.players).length : 0;
-    res.json({ message: "âœ… Bot is running!", onlinePlayers });
+    res.json({ message: "✅ Bot is running!", onlinePlayers });
   } catch (err) {
-    console.error('âš ï¸ Error in web server route:', err.message);
+    console.error('⚠️ Error in web server route:', err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`ðŸŒ Web server running on port ${PORT}`);
+  console.log(`🌐 Web server running on port ${PORT}`);
 });
 
 startBot();
