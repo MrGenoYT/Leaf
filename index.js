@@ -35,8 +35,12 @@ function processPacketQueue() {
     try {
       bot._client.write(packetName, data);
     } catch (err) {
-      console.error("Error sending queued packet", packetName, ":", err.message);
-      packetQueue.unshift({ packetName, data });
+      if (err.message.includes("Unexpected buffer end")) {
+        console.warn("⚠️ Incomplete packet detected. Retrying...");
+        packetQueue.unshift({ packetName, data });  // Requeue the packet
+      } else {
+        console.error("Error sending packet:", err.message);
+      }
       break;
     }
   }
@@ -207,7 +211,13 @@ function startBot() {
     reconnectBot();
   });
 
+  // Updated error handling with additional check for PartialReadError
   bot.on('error', (err) => {
+    console.error(`⚠️ Bot encountered an error: ${err.message}`);
+    if (err.name === 'PartialReadError' || err.message.includes("Unexpected buffer end")) {
+      console.log("🔄 Detected PartialReadError. Restarting bot...");
+      reconnectBot();
+    }
     basicErrorHandler(err);
     advancedErrorHandler(err);
   });
