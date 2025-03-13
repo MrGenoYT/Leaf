@@ -24,6 +24,11 @@ let packetQueue = [];      // Low-level packet actions to retry
 
 // --- Packet Queueing Functions ---
 function queuePacket(packetName, data) {
+  // Only queue packets if bot is online
+  if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) {
+    console.log(`Packet dropped (bot offline): ${packetName}`);
+    return;
+  }
   packetQueue.push({ packetName, data });
   processPacketQueue();
 }
@@ -168,7 +173,9 @@ function advancedErrorHandler(err) {
 // --- Bot Creation and Lifecycle ---
 function startBot() {
   if (moveInterval) clearInterval(moveInterval);
-  if (bot) bot.removeAllListeners();
+  if (bot) {
+    bot.removeAllListeners();
+  }
   console.log("🔄 Starting the bot...");
 
   bot = mineflayer.createBot(botOptions);
@@ -195,9 +202,9 @@ function startBot() {
 
   bot.on('end', (reason) => {
     console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
-    sendEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
+    sendEmbed('⚠️ Bot Disconnected', `Reason: ${reason}`, 0xff0000);
     packetQueue = [];
-    reconnectBot();
+    setTimeout(reconnectBot, 5000);
   });
 
   bot.on('kicked', (reason) => {
@@ -208,8 +215,16 @@ function startBot() {
   });
 
   bot.on('error', (err) => {
-    basicErrorHandler(err);
-    advancedErrorHandler(err);
+    console.error(`❌ Bot encountered an error: ${err.message}`);
+    sendEmbed('❌ Error', `An error occurred: ${err.message}`, 0xff0000);
+
+    if (err.code === 'ECONNRESET' || (err.message && err.message.includes('timed out'))) {
+      console.log("Detected network issue. Reconnecting...");
+      reconnectBot();
+    } else {
+      console.log("Critical error occurred. Restarting bot...");
+      setTimeout(() => reconnectBot(), 5000);
+    }
   });
 
   bot.on('chat', (username, message) => safeBotAction(() => sendChatMessage(username, message)));
@@ -219,9 +234,19 @@ function startBot() {
 
 function reconnectBot() {
   if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
+  if (bot) {
+    bot.removeAllListeners(); // Clear existing event listeners to prevent duplication
+    try {
+      bot.quit(); // Try to gracefully disconnect
+    } catch (e) {
+      console.error("Error during bot.quit:", e.message);
+    }
+    bot = null;
+  }
   if (reconnectTimeout) return;
   console.log("🔄 Reconnecting in 10 seconds...");
   reconnectTimeout = setTimeout(() => {
+    console.log("🔄 Attempting to restart bot...");
     startBot();
     reconnectTimeout = null;
   }, 10000);
@@ -255,8 +280,13 @@ app.get('/', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
-});
+try {
+  app.listen(PORT, () => {
+    console.log(`🌐 Web server running on port ${PORT}`);
+  });
+} catch (err) {
+  console.error("⚠️ Web server crashed:", err.message);
+  setTimeout(() => process.exit(1), 5000);
+}
 
 startBot();
