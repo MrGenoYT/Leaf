@@ -6,7 +6,7 @@ const express = require('express');
 
 // Server Details
 const botOptions = {
-  host: 'bataksurvival.aternos.me',
+  host: 'LostCloud.aternos.me',
   port: 12032,
   username: 'lookAt',
   connectTimeout: null,
