@@ -6,8 +6,8 @@ const express = require('express');
 
 // Server Details
 const botOptions = {
-  host: 'LostCloud.aternos.me',
-  port: 12032,
+  host: 'junglecreate.aternos.me',
+  port: 44969,
   username: 'lookAt',
   connectTimeout: null,
 };
