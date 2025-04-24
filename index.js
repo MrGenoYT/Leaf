@@ -22,7 +22,6 @@ let bot = null;
 let reconnectTimeout = null;
 let moveInterval = null;
 let pendingActions = [];   // Actions to execute when bot is ready
-let packetQueue = [];      // Low-level packet actions to retry
 let botStartTime = null;   // Track when the bot started
 let lastMovementTime = Date.now(); // Track last successful movement
 let movementCount = 0;     // Track number of movements performed
@@ -34,30 +33,6 @@ let spectatorWaypoints = [];
 let currentWaypointIndex = 0;
 let lastPositionChange = Date.now();
 const POSITION_CHANGE_INTERVAL = 45000; // 45 seconds between position changes
-
-// --- Packet Queueing Functions ---
-function queuePacket(packetName, data) {
-  packetQueue.push({ packetName, data });
-  processPacketQueue();
-}
-
-function processPacketQueue() {
-  if (!bot || !bot._client || !bot._client.socket || !bot._client.socket.writable) return;
-  while (packetQueue.length > 0) {
-    const { packetName, data } = packetQueue.shift();
-    try {
-      bot._client.write(packetName, data);
-    } catch (err) {
-      if (err.message.includes("Unexpected buffer end")) {
-        console.warn("⚠️ Incomplete packet detected. Retrying...");
-        packetQueue.unshift({ packetName, data });  // Requeue the packet
-      } else {
-        console.error("Error sending packet:", err.message);
-      }
-      break;
-    }
-  }
-}
 
 // --- Execute or Queue Actions ---
 function executeOrQueue(action) {
@@ -81,27 +56,6 @@ function flushPendingActions() {
       console.error("Error executing queued action:", err.message);
     }
   }
-}
-
-// --- Patch Bot's Packet Sending ---
-function patchPacketSending() {
-  if (!bot || !bot._client) return;
-  const originalWrite = bot._client.write.bind(bot._client);
-  bot._client.write = function(packetName, data) {
-    try {
-      originalWrite(packetName, data);
-    } catch (err) {
-      console.error("Packet sending error for", packetName, ":", err.message);
-      queuePacket(packetName, data);
-    }
-  };
-  bot._client.on('data', (data) => {
-    try {
-      // Let mineflayer handle the packet normally.
-    } catch (err) {
-      console.error("Packet receiving error:", err.message);
-    }
-  });
 }
 
 // --- Discord & Chat Webhook Functions ---
@@ -280,22 +234,10 @@ function moveToNextSpectatorWaypoint() {
   const waypoint = spectatorWaypoints[currentWaypointIndex];
   currentWaypointIndex = (currentWaypointIndex + 1) % spectatorWaypoints.length;
   
-  // Send position packet directly in spectator mode
+  // Use mineflayer's built-in methods instead of direct packet handling
   executeOrQueue(() => {
     bot.entity.position = waypoint.position;
     bot.look(waypoint.yaw, waypoint.pitch, true);
-    
-    // Explicitly send position packets to ensure server receives them
-    if (bot._client) {
-      bot._client.write('position', {
-        x: waypoint.position.x,
-        y: waypoint.position.y,
-        z: waypoint.position.z,
-        yaw: waypoint.yaw,
-        pitch: waypoint.pitch,
-        onGround: false
-      });
-    }
   });
   
   lastPositionChange = Date.now();
@@ -312,14 +254,6 @@ function spectatorLookAround() {
   
   executeOrQueue(() => {
     bot.look(yaw, pitch, true);
-    // Send explicit look packet
-    if (bot._client) {
-      bot._client.write('look', {
-        yaw: yaw,
-        pitch: pitch,
-        onGround: false
-      });
-    }
   });
   
   lastMovementTime = Date.now();
@@ -412,9 +346,7 @@ function startBot() {
     spectatorCenter = bot.entity.position.clone();
     generateSpectatorWaypoints();
     
-    patchPacketSending();
     flushPendingActions();
-    processPacketQueue();
 
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
@@ -425,13 +357,6 @@ function startBot() {
 
     // Start more frequent anti-AFK actions every 3 seconds
     moveInterval = setInterval(() => safeBotAction(antiAFKAction), 3000);
-    
-    // Add a regular ping to keep the connection alive
-    setInterval(() => {
-      if (bot && bot._client && bot._client.socket && bot._client.socket.writable) {
-        bot._client.write('keep_alive', { keepAliveId: Math.floor(Math.random() * 1000000) });
-      }
-    }, 15000);
     
     // Set up periodic player list updates (every 10 minutes)
     setInterval(() => safeBotAction(sendPlayerList), 10 * 60 * 1000);
@@ -460,14 +385,12 @@ function startBot() {
   bot.on('end', (reason) => {
     console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
     sendDiscordEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
-    packetQueue = [];
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
     console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
     sendDiscordEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
-    packetQueue = [];
     reconnectBot();
   });
 
