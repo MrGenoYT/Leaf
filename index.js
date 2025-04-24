@@ -37,7 +37,7 @@ const POSITION_CHANGE_INTERVAL = 45000; // 45 seconds between position changes
 
 // Y-axis limit configuration
 const MIN_Y_COORDINATE = 0;   // Bot should not go below this
-const MAX_Y_COORDINATE = 100; // Bot should not go above this
+const MAX_Y_COORDINATE = 300; // Bot should not go above this
 
 // --- Execute or Queue Actions ---
 function executeOrQueue(action) {
