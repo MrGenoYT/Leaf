@@ -8,7 +8,7 @@ const os = require('os');
 
 // Server Details
 const botOptions = {
-  host: 'LostCloud.aternos.me',
+  host: 'jungleduniya.aternos.me',
   port: 12032,
   username: 'lookAt',
   connectTimeout: null,
