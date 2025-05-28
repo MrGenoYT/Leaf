@@ -3,6 +3,7 @@ const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const Vec3 = require('vec3');
 const express = require('express');
+const path = require('path');
 const os = require('os');
 
 const BOT_HOST = process.env.BOT_HOST || 'Leafsong.aternos.me';
