@@ -8,9 +8,9 @@ const os = require('os');
 
 // Server Details
 const botOptions = {
-  host: 'jungleduniya.aternos.me',
-  port: 12032,
-  username: 'lookAt',
+  host: 'Leafsong.aternos.me',
+  port: 36915,
+  username: 'LeafBOT',
   connectTimeout: null,
 };
 
