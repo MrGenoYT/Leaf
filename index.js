@@ -498,10 +498,10 @@ function startBot() {
     moveInterval = setInterval(() => safeBotAction(antiAFKAction), 3000);
     
     // Set up periodic player list updates (every 10 minutes)
-    setInterval(() => safeBotAction(sendPlayerList), 10 * 60 * 1000);
+    setInterval(() => safeBotAction(sendPlayerList), 45 * 60 * 1000);
     
     // Set up periodic bot stats updates (every 30 minutes)
-    setInterval(() => safeBotAction(sendBotStats), 30 * 60 * 1000);
+    setInterval(() => safeBotAction(sendBotStats), 60 * 60 * 1000);
     
     // Add a dedicated Y-position check that runs frequently
     setInterval(() => safeBotAction(() => {
