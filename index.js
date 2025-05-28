@@ -480,7 +480,12 @@ function playerLeaveHandler(player) {
 }
 
 const app = express();
+
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
+app.get('/api/status', (req, res) => {
   try {
     const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
     const botStatus = {
