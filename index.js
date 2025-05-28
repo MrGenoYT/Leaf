@@ -1,4 +1,3 @@
-// LookAtBOT
 const mineflayer = require('mineflayer');
 const axios = require('axios');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
@@ -6,40 +5,53 @@ const Vec3 = require('vec3');
 const express = require('express');
 const os = require('os');
 
-// Server Details
+const BOT_HOST = process.env.BOT_HOST || 'Leafsong.aternos.me';
+const BOT_PORT = parseInt(process.env.BOT_PORT, 10) || 36915;
+const BOT_USERNAME = process.env.BOT_USERNAME || 'LeafBOT';
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
+const CHAT_WEBHOOK = process.env.CHAT_WEBHOOK;
+const MESSAGE_WEBHOOK = process.env.MESSAGE_WEBHOOK;
+const WEB_SERVER_PORT = process.env.PORT || 3000;
+
+const SPECTATOR_RANGE = 32;
+const POSITION_CHANGE_INTERVAL = 45000;
+const MIN_Y_COORDINATE = 0;
+const MAX_Y_COORDINATE = 300;
+const RECONNECT_DELAY = 10000;
+const ANTI_AFK_INTERVAL = 3000;
+const PLAYER_LIST_INTERVAL = 10 * 60 * 1000;
+const BOT_STATS_INTERVAL = 30 * 60 * 1000;
+const Y_POSITION_CHECK_INTERVAL = 5000;
+const STUCK_DETECTION_INTERVAL = 3000;
+const STUCK_COUNTER_THRESHOLD = 5;
+const SPECTATOR_ASCENT_STEP_DELAY = 300;
+const SPECTATOR_ASCENT_STEPS = 10;
+
+const DEFAULT_EMBED_COLOR = 0x3498db;
+const SUCCESS_EMBED_COLOR = 0x00ff00;
+const WARNING_EMBED_COLOR = 0xff9900;
+const ERROR_EMBED_COLOR = 0xff0000;
+const INFO_EMBED_COLOR = 0x9b59b6;
+
 const botOptions = {
-  host: 'Leafsong.aternos.me',
-  port: 36915,
-  username: 'LeafBOT',
+  host: BOT_HOST,
+  port: BOT_PORT,
+  username: BOT_USERNAME,
   connectTimeout: null,
 };
-
-// Use environment variables for webhooks
-const discordWebhook = process.env.DISCORD_WEBHOOK; // For bot logs only
-const chatWebhook = process.env.CHAT_WEBHOOK;       // For player status and bot stats
-const messageWebhook = process.env.MESSAGE_WEBHOOK; // For player chat messages only
 
 let bot = null;
 let reconnectTimeout = null;
 let moveInterval = null;
-let pendingActions = [];   // Actions to execute when bot is ready
-let botStartTime = null;   // Track when the bot started
-let lastMovementTime = Date.now(); // Track last successful movement
-let movementCount = 0;     // Track number of movements performed
-
-// Spectator mode specific settings
-let spectatorCenter = null;  // Will be set to bot spawn position
-const SPECTATOR_RANGE = 32;  // 64x64 area = 32 blocks in each direction from center
+let pendingActions = [];
+let botStartTime = null;
+let lastMovementTime = Date.now();
+let movementCount = 0;
+let spectatorCenter = null;
 let spectatorWaypoints = [];
 let currentWaypointIndex = 0;
 let lastPositionChange = Date.now();
-const POSITION_CHANGE_INTERVAL = 45000; // 45 seconds between position changes
 
-// Y-axis limit configuration
-const MIN_Y_COORDINATE = 0;   // Bot should not go below this
-const MAX_Y_COORDINATE = 300; // Bot should not go above this
-
-// --- Execute or Queue Actions ---
 function executeOrQueue(action) {
   if (bot && bot._client && bot._client.socket && bot._client.socket.writable) {
     try {
@@ -63,384 +75,232 @@ function flushPendingActions() {
   }
 }
 
-// --- Discord & Chat Webhook Functions ---
-async function sendDiscordEmbed(title, description, color = 0x3498db, fields = []) {
+async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
+  if (!DISCORD_WEBHOOK) return;
   try {
-    await axios.post(discordWebhook, {
-      embeds: [{
-        title,
-        description,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-      }],
+    await axios.post(DISCORD_WEBHOOK, {
+      embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
     console.error('❌ Discord Webhook Error:', err.message);
   }
 }
 
-async function sendChatEmbed(title, description, color = 0x00ff00, fields = []) {
+async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fields = []) {
+  if (!CHAT_WEBHOOK) return;
   try {
-    await axios.post(chatWebhook, {
-      embeds: [{
-        title,
-        description,
-        color,
-        fields,
-        timestamp: new Date().toISOString(),
-      }],
+    await axios.post(CHAT_WEBHOOK, {
+      embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
     console.error('❌ Chat Webhook Error:', err.message);
   }
 }
 
-// Send player chat messages to the dedicated message webhook
 async function sendPlayerMessage(username, message) {
-  // Don't process bot's own messages
-  if (username === botOptions.username) return;
-  
+  if (username === botOptions.username || !MESSAGE_WEBHOOK) return;
   try {
-    await axios.post(messageWebhook, {
-      embeds: [{
-        author: { name: username },
-        description: message,
-        color: 0x00ff00,
-        timestamp: new Date().toISOString(),
-      }],
+    await axios.post(MESSAGE_WEBHOOK, {
+      embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
     console.error('❌ Message Webhook Error:', err.message);
   }
 }
 
-// --- Periodic Status Reports ---
-
-// Send list of all players every 10 minutes
 function sendPlayerList() {
   if (!bot || !bot.players) return;
-  
   try {
-    // Filter out the bot itself from player list
     const playerList = Object.keys(bot.players)
       .filter(name => name !== botOptions.username)
-      .map(name => {
-        const player = bot.players[name];
-        return {
-          name: name,
-          ping: player.ping || 'N/A',
-          entity: player.entity ? 'Yes' : 'No' // Whether entity is loaded (player is nearby)
-        };
-      });
-    
+      .map(name => ({ name: name, ping: bot.players[name].ping || 'N/A', entity: bot.players[name].entity ? 'Yes' : 'No' }));
+
     if (playerList.length === 0) {
-      sendChatEmbed('👥 Player List', 'No players online', 0x3498db);
+      sendChatEmbed('👥 Player List', 'No players online', DEFAULT_EMBED_COLOR);
       return;
     }
-    
-    const fields = playerList.map(player => ({
-      name: player.name,
-      value: `Ping: ${player.ping}ms | In Range: ${player.entity}`,
-      inline: true
-    }));
-    
-    sendChatEmbed(
-      '👥 Player List', 
-      `${playerList.length} player(s) online`, 
-      0x3498db, 
-      fields
-    );
+    const fields = playerList.map(player => ({ name: player.name, value: `Ping: ${player.ping}ms | In Range: ${player.entity}`, inline: true }));
+    sendChatEmbed('👥 Player List', `${playerList.length} player(s) online`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
     console.error('Error sending player list:', err.message);
   }
 }
 
-// Send detailed bot statistics every 30 minutes
 function sendBotStats() {
   if (!bot || !bot.entity) return;
-  
   try {
     const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
     const seconds = uptime % 60;
     const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
-    
     const position = bot.entity.position;
     const posStr = `X: ${Math.floor(position.x)}, Y: ${Math.floor(position.y)}, Z: ${Math.floor(position.z)}`;
-    
     const memoryUsage = process.memoryUsage();
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
-    
     const isMoving = Date.now() - lastMovementTime < 5000;
     const ping = bot.player ? bot.player.ping : 'Unknown';
-    
-    sendChatEmbed(
-      '🤖 Bot Status Report', 
-      `Status report for LookAtBOT`, 
-      0x9b59b6, 
-      [
-        { name: 'Uptime', value: uptimeStr, inline: true },
-        { name: 'Position', value: posStr, inline: true },
-        { name: 'Game Mode', value: bot.gameMode === 3 ? 'Spectator' : `Mode ${bot.gameMode || 'Unknown'}`, inline: true },
-        { name: 'Memory Usage', value: memoryStr, inline: true },
-        { name: 'Ping', value: `${ping}ms`, inline: true },
-        { name: 'Movement Status', value: isMoving ? '✅ Moving' : '❌ Static', inline: true },
-        { name: 'Movement Count', value: `${movementCount} moves`, inline: true },
-        { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true },
-        { name: 'Waypoints', value: `${spectatorWaypoints.length}`, inline: true }
-      ]
-    );
+
+    sendChatEmbed('🤖 Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
+      { name: 'Uptime', value: uptimeStr, inline: true },
+      { name: 'Position', value: posStr, inline: true },
+      { name: 'Game Mode', value: bot.gameMode === 3 ? 'Spectator' : `Mode ${bot.gameMode || 'Unknown'}`, inline: true },
+      { name: 'Memory Usage', value: memoryStr, inline: true },
+      { name: 'Ping', value: `${ping}ms`, inline: true },
+      { name: 'Movement Status', value: isMoving ? '✅ Moving' : '❌ Static', inline: true },
+      { name: 'Movement Count', value: `${movementCount} moves`, inline: true },
+      { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true },
+      { name: 'Waypoints', value: `${spectatorWaypoints.length}`, inline: true }
+    ]);
   } catch (err) {
     console.error('Error sending bot stats:', err.message);
   }
 }
 
-// --- Spectator Flight Control ---
-
-// Fly upward in spectator mode when below minimum Y level
 function spectatorFlyUp() {
-  if (!bot || !bot.entity || bot.gameMode !== 3) return;
-  
+  if (!bot || !bot.entity || bot.gameMode !== 3) return false;
   const currentPos = bot.entity.position;
   if (currentPos.y < MIN_Y_COORDINATE) {
     console.log(`🔼 Bot below Y=${MIN_Y_COORDINATE}. Flying up to safe altitude...`);
-    sendDiscordEmbed('🛫 Spectator Ascent', `Bot flying up from Y=${currentPos.y.toFixed(2)} to safe altitude`, 0xff9900);
-    
-    // Calculate a safe position to fly to (same X/Z, but safe Y)
-    const safeY = MIN_Y_COORDINATE + 15; // Target 15 blocks above minimum
+    sendDiscordEmbed('🛫 Spectator Ascent', `Bot flying up from Y=${currentPos.y.toFixed(2)} to safe altitude`, WARNING_EMBED_COLOR);
+    const safeY = MIN_Y_COORDINATE + 15;
     const targetPos = new Vec3(currentPos.x, safeY, currentPos.z);
-    
-    // Use gradual movement steps for a smooth ascent
-    const steps = 10;
+    const steps = SPECTATOR_ASCENT_STEPS;
     const stepSize = (safeY - currentPos.y) / steps;
-    
-    // Schedule multiple small movements for a gradual ascent
+
     for (let i = 1; i <= steps; i++) {
       setTimeout(() => {
         if (!bot || !bot.entity) return;
-        
         const stepY = currentPos.y + (stepSize * i);
         const stepPos = new Vec3(currentPos.x, stepY, currentPos.z);
-        
         executeOrQueue(() => {
-          // Use entity.position directly for spectator movement
           bot.entity.position = stepPos;
-          
-          // Look slightly upward while ascending
           bot.look(bot.entity.yaw, -0.3, true);
-          
           if (i === steps) {
             console.log(`✅ Completed ascent to Y=${stepPos.y.toFixed(2)}`);
-            // Once at safe altitude, reset the spectator waypoints from this position
             spectatorCenter = bot.entity.position.clone();
             generateSpectatorWaypoints();
           }
         });
-      }, i * 300); // 300ms between steps for a smooth ascent
+      }, i * SPECTATOR_ASCENT_STEP_DELAY);
     }
-    
     lastMovementTime = Date.now();
     movementCount++;
-    return true; // Return true to indicate we're handling this situation
+    return true;
   }
-  return false; // Return false if no action was needed
+  return false;
 }
 
-// --- Y-coordinate Enforcement Function ---
 function enforceYAxisLimits(position) {
-  // Clone the position to avoid modifying the original
   const safePosition = position.clone();
-  
-  // Enforce the Y-axis limits
   if (safePosition.y < MIN_Y_COORDINATE) {
     console.log(`🔼 Bot position too low (Y=${safePosition.y.toFixed(2)}). Correcting to Y=${MIN_Y_COORDINATE + 10}`);
-    safePosition.y = MIN_Y_COORDINATE + 10; // Move 10 blocks above minimum
+    safePosition.y = MIN_Y_COORDINATE + 10;
   } else if (safePosition.y > MAX_Y_COORDINATE) {
     console.log(`🔽 Bot position too high (Y=${safePosition.y.toFixed(2)}). Correcting to Y=${MAX_Y_COORDINATE - 10}`);
-    safePosition.y = MAX_Y_COORDINATE - 10; // Move 10 blocks below maximum
+    safePosition.y = MAX_Y_COORDINATE - 10;
   }
-  
   return safePosition;
 }
 
-// --- Spectator Mode Functions ---
-
-// Generate waypoints in a 64x64 area around the center with Y-axis limits
 function generateSpectatorWaypoints() {
   if (!spectatorCenter) return;
-  
   spectatorWaypoints = [];
-  
-  // Generate waypoints in a spiral pattern
   for (let layer = 0; layer < 8; layer++) {
-    const layerDistance = (layer + 1) * 4;  // Increasing distance for each layer
-    
-    // Generate points on each layer
+    const layerDistance = (layer + 1) * 4;
     for (let i = 0; i < 8; i++) {
       const angle = (Math.PI * 2 / 8) * i;
       const x = spectatorCenter.x + Math.cos(angle) * layerDistance;
       const z = spectatorCenter.z + Math.sin(angle) * layerDistance;
-      
-      // Add variation to Y coordinate but respect Y-axis limits
       let y = spectatorCenter.y + (Math.random() * 20 - 10);
-      y = Math.max(MIN_Y_COORDINATE + 5, Math.min(MAX_Y_COORDINATE - 5, y)); // Keep within safe range
-      
-      spectatorWaypoints.push({
-        position: new Vec3(x, y, z),
-        yaw: angle + Math.PI, // Look toward center
-        pitch: Math.random() * 0.5 - 0.25 // Slight random up/down look
-      });
+      y = Math.max(MIN_Y_COORDINATE + 5, Math.min(MAX_Y_COORDINATE - 5, y));
+      spectatorWaypoints.push({ position: new Vec3(x, y, z), yaw: angle + Math.PI, pitch: Math.random() * 0.5 - 0.25 });
     }
   }
-  
-  // Shuffle waypoints for more random movement pattern
   spectatorWaypoints.sort(() => Math.random() - 0.5);
-  
   console.log(`Generated ${spectatorWaypoints.length} waypoints for spectator mode (Y-limited: ${MIN_Y_COORDINATE}-${MAX_Y_COORDINATE})`);
-  sendDiscordEmbed('🗺️ Waypoints Generated', 
-    `Generated ${spectatorWaypoints.length} waypoints for spectator mode navigation with Y-axis limits (${MIN_Y_COORDINATE}-${MAX_Y_COORDINATE})`, 
-    0x9b59b6);
+  sendDiscordEmbed('🗺️ Waypoints Generated', `Generated ${spectatorWaypoints.length} waypoints for spectator mode navigation with Y-axis limits (${MIN_Y_COORDINATE}-${MAX_Y_COORDINATE})`, INFO_EMBED_COLOR);
 }
 
-// Move to the next waypoint in spectator mode with improved Y-axis handling
 function moveToNextSpectatorWaypoint() {
   if (!bot || !bot.entity || spectatorWaypoints.length === 0) return;
-  
-  // First check if we need to fly up
-  if (spectatorFlyUp()) {
-    // If we're flying up, don't continue with regular waypoint movement
-    return;
-  }
-  
+  if (spectatorFlyUp()) return;
+
   const waypoint = spectatorWaypoints[currentWaypointIndex];
   currentWaypointIndex = (currentWaypointIndex + 1) % spectatorWaypoints.length;
-  
-  // Apply Y-axis limitations to the waypoint position
   const safePosition = enforceYAxisLimits(waypoint.position);
-  
-  // For spectator mode, we're going to use direct position updates
   executeOrQueue(() => {
-    // In spectator mode, we can directly set the position
     bot.entity.position = safePosition;
     bot.look(waypoint.yaw, waypoint.pitch, true);
   });
-  
   lastPositionChange = Date.now();
   lastMovementTime = Date.now();
   movementCount++;
 }
 
-// Random look around function specifically for spectator mode
 function spectatorLookAround() {
   if (!bot || !bot.entity) return;
-  
-  // First check if we need to fly up
-  if (spectatorFlyUp()) {
-    // If we're flying up, don't continue with regular look around
-    return;
-  }
-  
+  if (spectatorFlyUp()) return;
+
   const yaw = Math.random() * Math.PI * 2;
-  const pitch = (Math.random() * Math.PI / 2) - (Math.PI / 4); // Look up/down more extensively
-  
-  executeOrQueue(() => {
-    bot.look(yaw, pitch, true);
-  });
-  
+  const pitch = (Math.random() * Math.PI / 2) - (Math.PI / 4);
+  executeOrQueue(() => bot.look(yaw, pitch, true));
   lastMovementTime = Date.now();
   movementCount++;
 }
 
-// --- Anti-AFK Action ---
-// Enhanced to better handle spectator mode and respect Y-axis limits
 function antiAFKAction() {
   if (!bot || !bot.entity) return;
-  
-  // First check if we need to fly up in spectator mode
-  if (bot.gameMode === 3 && spectatorFlyUp()) {
-    // If we're flying up, don't continue with regular anti-AFK
-    return;
-  }
-  
-  if (bot.gameMode === 3) { // Spectator mode
-    // Check if it's time to move to a new position
+  if (bot.gameMode === 3 && spectatorFlyUp()) return;
+
+  if (bot.gameMode === 3) {
     if (Date.now() - lastPositionChange > POSITION_CHANGE_INTERVAL) {
       moveToNextSpectatorWaypoint();
     } else {
-      // Just look around between position changes
       spectatorLookAround();
     }
   } else {
-    // Regular mode: pick a random action with Y-axis check
     const currentPosition = bot.entity.position;
     if (currentPosition.y < MIN_Y_COORDINATE) {
-      // Force moving up if below minimum Y
       executeOrQueue(() => {
-        const goal = new goals.GoalBlock(
-          Math.floor(currentPosition.x), 
-          Math.floor(MIN_Y_COORDINATE + 10),  // Move 10 blocks above minimum
-          Math.floor(currentPosition.z)
-        );
+        const goal = new goals.GoalBlock(Math.floor(currentPosition.x), Math.floor(MIN_Y_COORDINATE + 10), Math.floor(currentPosition.z));
         bot.pathfinder.setGoal(goal);
       });
       console.log(`🔼 Anti-AFK: Moving up from Y=${currentPosition.y.toFixed(2)} to Y=${MIN_Y_COORDINATE + 10}`);
     } else if (currentPosition.y > MAX_Y_COORDINATE) {
-      // Force moving down if above maximum Y
       executeOrQueue(() => {
-        const goal = new goals.GoalBlock(
-          Math.floor(currentPosition.x), 
-          Math.floor(MAX_Y_COORDINATE - 10),  // Move 10 blocks below maximum
-          Math.floor(currentPosition.z)
-        );
+        const goal = new goals.GoalBlock(Math.floor(currentPosition.x), Math.floor(MAX_Y_COORDINATE - 10), Math.floor(currentPosition.z));
         bot.pathfinder.setGoal(goal);
       });
       console.log(`🔽 Anti-AFK: Moving down from Y=${currentPosition.y.toFixed(2)} to Y=${MAX_Y_COORDINATE - 10}`);
     } else {
-      // Regular anti-AFK actions if Y-position is safe
       const action = Math.random();
       if (action < 0.33) {
-        // Random walk with Y-axis limitations
         const x = Math.floor(Math.random() * 20 - 10);
         const z = Math.floor(Math.random() * 20 - 10);
-        
-        // Keep Y within safe limits
         let y = bot.entity.position.y;
-        // Occasionally try to move up/down a little
         if (Math.random() < 0.3) {
           y += (Math.random() * 10) - 5;
           y = Math.max(MIN_Y_COORDINATE + 5, Math.min(MAX_Y_COORDINATE - 5, y));
         }
-        
-        const goal = new goals.GoalBlock(
-          Math.floor(bot.entity.position.x + x), 
-          Math.floor(y), 
-          Math.floor(bot.entity.position.z + z)
-        );
+        const goal = new goals.GoalBlock(Math.floor(bot.entity.position.x + x), Math.floor(y), Math.floor(bot.entity.position.z + z));
         executeOrQueue(() => bot.pathfinder.setGoal(goal));
       } else if (action < 0.66) {
-        // Random look direction
         const yaw = Math.random() * Math.PI * 2;
         const pitch = (Math.random() * Math.PI / 4) - (Math.PI / 8);
         executeOrQueue(() => bot.look(yaw, pitch, true));
       } else {
-        // Jump action
         executeOrQueue(() => {
           bot.setControlState('jump', true);
-          setTimeout(() => {
-            bot.setControlState('jump', false);
-          }, 300);
+          setTimeout(() => bot.setControlState('jump', false), 300);
         });
       }
     }
-    
     lastMovementTime = Date.now();
     movementCount++;
   }
 }
 
-// Helper wrapper to safely execute bot actions
 function safeBotAction(action) {
   try {
     if (bot) action();
@@ -449,27 +309,24 @@ function safeBotAction(action) {
   }
 }
 
-// --- Error Handling Steps ---
 function basicErrorHandler(err) {
   console.error(`Basic error handling: ${err.message}`);
-  sendDiscordEmbed('⚠️ Error Detected', `Bot encountered an error: ${err.message}`, 0xff9900);
+  sendDiscordEmbed('⚠️ Error Detected', `Bot encountered an error: ${err.message}`, WARNING_EMBED_COLOR);
 }
 
 function advancedErrorHandler(err) {
   console.error(`Advanced error handling: ${err.stack}`);
   if (err.message && (err.message.includes("timed out after 30000 milliseconds") || err.code === 'ECONNRESET')) {
     console.log("Network error detected, attempting to reconnect...");
-    sendDiscordEmbed('🔄 Network Error', `Network error detected: ${err.message}. Attempting to reconnect...`, 0xff0000);
+    sendDiscordEmbed('🔄 Network Error', `Network error detected: ${err.message}. Attempting to reconnect...`, ERROR_EMBED_COLOR);
     reconnectBot();
   }
 }
 
-// --- Bot Creation and Lifecycle ---
 function startBot() {
   if (moveInterval) clearInterval(moveInterval);
   if (bot) bot.removeAllListeners();
   console.log("🔄 Starting the bot...");
-  
   botStartTime = Date.now();
   movementCount = 0;
 
@@ -478,13 +335,11 @@ function startBot() {
 
   bot.once('spawn', () => {
     console.log('✅ Bot joined the server!');
-    sendDiscordEmbed('✅ LookAt Start', 'LookAtBOT has started and joined the server.', 0x00ff00);
+    sendDiscordEmbed('✅ Bot Start', `${botOptions.username} has started and joined the server.`, SUCCESS_EMBED_COLOR);
 
-    // Set spectator center to spawn position and ensure it respects Y-axis limits
     spectatorCenter = bot.entity.position.clone();
     spectatorCenter.y = Math.max(MIN_Y_COORDINATE + 20, Math.min(MAX_Y_COORDINATE - 20, spectatorCenter.y));
     generateSpectatorWaypoints();
-    
     flushPendingActions();
 
     if (bot._client && bot._client.socket) {
@@ -494,56 +349,48 @@ function startBot() {
       });
     }
 
-    // Start more frequent anti-AFK actions every 3 seconds
-    moveInterval = setInterval(() => safeBotAction(antiAFKAction), 3000);
-    
-    // Set up periodic player list updates (every 10 minutes)
-    setInterval(() => safeBotAction(sendPlayerList), 45 * 60 * 1000);
-    
-    // Set up periodic bot stats updates (every 30 minutes)
-    setInterval(() => safeBotAction(sendBotStats), 60 * 60 * 1000);
-    
-    // Add a dedicated Y-position check that runs frequently
+    moveInterval = setInterval(() => safeBotAction(antiAFKAction), ANTI_AFK_INTERVAL);
+    setInterval(() => safeBotAction(sendPlayerList), PLAYER_LIST_INTERVAL);
+    setInterval(() => safeBotAction(sendBotStats), BOT_STATS_INTERVAL);
     setInterval(() => safeBotAction(() => {
-      if (bot.gameMode === 3 && bot.entity.position.y < MIN_Y_COORDINATE) {
+      if (bot.gameMode === 3 && bot.entity && bot.entity.position.y < MIN_Y_COORDINATE) {
         spectatorFlyUp();
       }
-    }), 5000);
-    
-    // Send initial player list and bot stats
+    }), Y_POSITION_CHECK_INTERVAL);
+
     setTimeout(() => safeBotAction(sendPlayerList), 5000);
     setTimeout(() => safeBotAction(sendBotStats), 10000);
   });
 
-  // Monitor game mode changes
-  bot.on('game', (event) => {
-    if (event?.gameMode === 3 && bot.gameMode !== 3) {
-      console.log('🔍 Bot entered spectator mode');
-      sendDiscordEmbed('🔍 Mode Change', 'LookAtBOT entered spectator mode.', 0x9b59b6);
-      
-      // Check position immediately when entering spectator mode
-      if (bot.entity && bot.entity.position.y < MIN_Y_COORDINATE) {
-        console.log('⚠️ Entered spectator mode below minimum Y. Flying up...');
-        spectatorFlyUp();
-      } else {
-        // Regenerate waypoints when entering spectator mode
-        spectatorCenter = bot.entity.position.clone();
-        spectatorCenter.y = Math.max(MIN_Y_COORDINATE + 20, Math.min(MAX_Y_COORDINATE - 20, spectatorCenter.y));
-        generateSpectatorWaypoints();
-        moveToNextSpectatorWaypoint(); // Move immediately to first waypoint
-      }
+  bot.on('game', () => {
+    if (bot.gameMode === 3) {
+        const wasNotSpectator = !bot.lastGameMode || bot.lastGameMode !== 3;
+        if (wasNotSpectator) {
+            console.log('🔍 Bot entered spectator mode');
+            sendDiscordEmbed('🔍 Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
+            if (bot.entity && bot.entity.position.y < MIN_Y_COORDINATE) {
+                console.log('⚠️ Entered spectator mode below minimum Y. Flying up...');
+                spectatorFlyUp();
+            } else if (bot.entity) {
+                spectatorCenter = bot.entity.position.clone();
+                spectatorCenter.y = Math.max(MIN_Y_COORDINATE + 20, Math.min(MAX_Y_COORDINATE - 20, spectatorCenter.y));
+                generateSpectatorWaypoints();
+                moveToNextSpectatorWaypoint();
+            }
+        }
     }
+    bot.lastGameMode = bot.gameMode;
   });
 
   bot.on('end', (reason) => {
     console.log(`⚠️ Bot disconnected: ${reason}. Attempting to reconnect...`);
-    sendDiscordEmbed('⚠️ LookAt Disconnect', `LookAtBOT was disconnected. Reason: ${reason}.`, 0xff0000);
+    sendDiscordEmbed('⚠️ Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     reconnectBot();
   });
 
   bot.on('kicked', (reason) => {
     console.log(`🚫 Bot was kicked: ${reason}. Reconnecting...`);
-    sendDiscordEmbed('🚫 LookAt Stop', `LookAtBOT was kicked. Reason: ${reason}.`, 0xff0000);
+    sendDiscordEmbed('🚫 Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     reconnectBot();
   });
 
@@ -557,58 +404,40 @@ function startBot() {
     advancedErrorHandler(err);
   });
 
-  // Enhanced position monitoring with Y-axis checks
   let lastPosition = null;
   let stuckCounter = 0;
   setInterval(() => {
     if (!bot || !bot.entity) return;
-    
-    // Check if bot is below minimum Y in spectator mode
     const currentPos = bot.entity.position;
+
     if (bot.gameMode === 3 && currentPos.y < MIN_Y_COORDINATE) {
       console.log(`⚠️ Bot below Y-axis minimum in spectator mode: Y=${currentPos.y.toFixed(2)}`);
-      sendDiscordEmbed('⚠️ Position Warning', 
-        `Bot below Y-axis minimum (${MIN_Y_COORDINATE}) in spectator mode: Y=${currentPos.y.toFixed(2)}. Flying up...`, 
-        0xff9900);
-      
-      // Initiate flying up procedure
+      sendDiscordEmbed('⚠️ Position Warning', `Bot below Y-axis minimum (${MIN_Y_COORDINATE}) in spectator mode: Y=${currentPos.y.toFixed(2)}. Flying up...`, WARNING_EMBED_COLOR);
       spectatorFlyUp();
       return;
     }
-    
-    // Check for above maximum Y in spectator mode
+
     if (bot.gameMode === 3 && currentPos.y > MAX_Y_COORDINATE) {
       console.log(`⚠️ Bot above Y-axis maximum in spectator mode: Y=${currentPos.y.toFixed(2)}`);
-      
-      // For moving down, we can just immediately set position
       const safeY = MAX_Y_COORDINATE - 10;
       executeOrQueue(() => {
         bot.entity.position = new Vec3(currentPos.x, safeY, currentPos.z);
       });
-      
-      // Log the correction
-      sendDiscordEmbed('⚠️ Position Warning', 
-        `Bot above Y-axis maximum (${MAX_Y_COORDINATE}) in spectator mode: Y=${currentPos.y.toFixed(2)}. Moving down...`, 
-        0xff9900);
-        
+      sendDiscordEmbed('⚠️ Position Warning', `Bot above Y-axis maximum (${MAX_Y_COORDINATE}) in spectator mode: Y=${currentPos.y.toFixed(2)}. Moving down...`, WARNING_EMBED_COLOR);
       return;
     }
-    
-    // Additional stuck detection specifically for spectator mode
+
     if (bot.gameMode === 3) {
       if (lastPosition && currentPos.distanceTo(lastPosition) < 0.1) {
         stuckCounter++;
-        if (stuckCounter > 5) { // If stuck for more than 15 seconds (5 * 3s interval)
+        if (stuckCounter > STUCK_COUNTER_THRESHOLD) {
           console.log("🚨 Bot appears stuck in spectator mode. Forcing position change.");
-          sendDiscordEmbed('🚨 Bot Stuck', `Bot appears stuck in spectator mode. Forcing position change.`, 0xff9900);
-          
-          // Check if we're stuck below Y=0
+          sendDiscordEmbed('🚨 Bot Stuck', `Bot appears stuck in spectator mode. Forcing position change.`, WARNING_EMBED_COLOR);
           if (currentPos.y < MIN_Y_COORDINATE) {
             spectatorFlyUp();
           } else {
             moveToNextSpectatorWaypoint();
           }
-          
           stuckCounter = 0;
         }
       } else {
@@ -616,62 +445,44 @@ function startBot() {
       }
       lastPosition = currentPos.clone();
     }
-  }, 3000);
+  }, STUCK_DETECTION_INTERVAL);
 
-  // Use the dedicated player message webhook for chat messages
   bot.on('chat', (username, message) => safeBotAction(() => sendPlayerMessage(username, message)));
-  
   bot.on('playerJoined', (player) => safeBotAction(() => playerJoinHandler(player)));
-  
   bot.on('playerLeft', (player) => safeBotAction(() => playerLeaveHandler(player)));
 }
 
 function reconnectBot() {
-  if (moveInterval) { clearInterval(moveInterval); moveInterval = null; }
-  // Clear any existing reconnect timer to avoid duplicate timers
+  if (moveInterval) {
+    clearInterval(moveInterval);
+    moveInterval = null;
+  }
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
   }
-  console.log("🔄 Reconnecting in 10 seconds...");
+  console.log(`🔄 Reconnecting in ${RECONNECT_DELAY / 1000} seconds...`);
   reconnectTimeout = setTimeout(() => {
     startBot();
     reconnectTimeout = null;
-  }, 10000);
+  }, RECONNECT_DELAY);
 }
 
 function playerJoinHandler(player) {
-  // Ignore the bot itself
   if (player.username === botOptions.username) return;
-  
-  const onlinePlayers = bot?.players ? 
-    Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
-    
-  sendChatEmbed('👤 Player Joined', `**${player.username}** joined the game.`, 0x00ff00, [
-    { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
-  ]);
+  const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
+  sendChatEmbed('👤 Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [{ name: 'Current Players', value: `${onlinePlayers}`, inline: true }]);
 }
 
 function playerLeaveHandler(player) {
-  // Ignore the bot itself
   if (player.username === botOptions.username) return;
-  
-  const onlinePlayers = bot?.players ? 
-    Object.keys(bot.players).filter(name => name !== botOptions.username).length - 1 : 0;
-    
-  sendChatEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [
-    { name: 'Current Players', value: `${onlinePlayers}`, inline: true },
-  ]);
+  const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length -1 : 0; // -1 because playerLeft is emitted after removal from list in some versions
+  sendChatEmbed('🚪 Player Left', `**${player.username}** left the game.`, 0xff4500, [{ name: 'Current Players', value: `${onlinePlayers > 0 ? onlinePlayers : 0}`, inline: true }]);
 }
 
-// --- Web Monitoring Server ---
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.get('/', (req, res) => {
   try {
-    const onlinePlayers = bot?.players ? 
-      Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
-      
+    const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
     const botStatus = {
       message: "✅ Bot is running!",
       onlinePlayers,
@@ -685,7 +496,7 @@ app.get('/', (req, res) => {
       waypoints: spectatorWaypoints.length,
       movements: movementCount,
       memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
-      yAxisLimits: `${MIN_Y_COORDINATE}-${MAX_Y_COORDINATE}`, // Added Y-axis limits info
+      yAxisLimits: `${MIN_Y_COORDINATE}-${MAX_Y_COORDINATE}`,
       belowMinY: bot?.entity?.position ? bot.entity.position.y < MIN_Y_COORDINATE : false
     };
     res.json(botStatus);
@@ -695,9 +506,9 @@ app.get('/', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🌐 Web server running on port ${PORT}`);
-  sendDiscordEmbed('🌐 Web Server', `Web monitoring server started on port ${PORT}`, 0x3498db);
+app.listen(WEB_SERVER_PORT, () => {
+  console.log(`🌐 Web server running on port ${WEB_SERVER_PORT}`);
+  sendDiscordEmbed('🌐 Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
 startBot();
