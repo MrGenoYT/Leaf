@@ -450,7 +450,7 @@
 
     <footer>
         <div class="container">
-            <p>&copy; 2025 Leaf Dashboard. Monitoring your experience.</p>
+            <p>&copy; 2025 Leaf </p>
         </div>
     </footer>
 
@@ -520,7 +520,7 @@
 
         async function fetchData() {
             try {
-                const response = await fetch('/');
+                const response = await fetch('/api/status');
                 const data = await response.json();
                 updateStatus(data);
             } catch (error) {
