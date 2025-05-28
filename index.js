@@ -11,7 +11,6 @@ const botOptions = {
   host: 'Leafsong.aternos.me',
   port: 36915,
   username: 'LeafBOT',
-  version: '1.21.5',
   connectTimeout: null,
 };
 
