@@ -24,7 +24,6 @@ const SUCCESS_EMBED_COLOR = 0x00ff00;
 const WARNING_EMBED_COLOR = 0xff9900;
 const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
-
 const botOptions = {
   host: BOT_HOST,
   port: BOT_PORT,
@@ -49,62 +48,70 @@ function clearAllIntervals() {
   if (movementInterval) {
     clearInterval(movementInterval);
     movementInterval = null;
-  }
+}
   if (lookInterval) {
     clearInterval(lookInterval);
     lookInterval = null;
-  }
+}
   if (playerListInterval) {
     clearInterval(playerListInterval);
     playerListInterval = null;
-  }
+}
   if (botStatsInterval) {
     clearInterval(botStatsInterval);
     botStatsInterval = null;
-  }
+}
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
-  }
+}
 }
 
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
   if (!DISCORD_WEBHOOK) {
     return;
-  }
+}
   try {
     await axios.post(DISCORD_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
-  } catch (err) {
+} catch (err) {
     console.error('Discord Webhook Error:', err.message);
-  }
+}
 }
 
 async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fields = []) {
   if (!CHAT_WEBHOOK) {
     return;
-  }
+}
   try {
     await axios.post(CHAT_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
-  } catch (err) {
+} catch (err) {
     console.error('Chat Webhook Error:', err.message);
-  }
+}
 }
 
 async function sendPlayerMessage(username, message) {
   if (username === botOptions.username || !MESSAGE_WEBHOOK) {
     return;
-  }
+}
   try {
     await axios.post(MESSAGE_WEBHOOK, {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
-  } catch (err) {
+} catch (err) {
     console.error('Message Webhook Error:', err.message);
+}
+}
+
+// Helper to get online players excluding the bot
+function getOnlinePlayersExcludingBot() {
+  if (!bot || !bot.players) {
+    return [];
   }
+  return Object.values(bot.players).filter(p => p.username !== botOptions.username);
 }
 
 function sendPlayerList() {
@@ -112,24 +119,19 @@ function sendPlayerList() {
     return;
   }
   try {
-    const playerList = Object.keys(bot.players)
-      .filter(name => name !== botOptions.username)
-      .map(name => ({
-        name: name,
-        ping: bot.players[name].ping || 'N/A',
-        entity: bot.players[name].entity ? 'Yes' : 'No'
-      }));
-    if (playerList.length === 0) {
-      sendChatEmbed('Player List', 'No players online', DEFAULT_EMBED_COLOR);
+    const playersExcludingBot = getOnlinePlayersExcludingBot();
+
+    if (playersExcludingBot.length === 0) {
+      sendChatEmbed('Player List', 'No other players online', DEFAULT_EMBED_COLOR);
       return;
     }
 
-    const fields = playerList.map(player => ({
-      name: player.name,
-      value: `Ping: ${player.ping}ms | In Range: ${player.entity}`,
+    const fields = playersExcludingBot.map(player => ({
+      name: player.username,
+      value: `Ping: ${player.ping || 'N/A'}ms | In Range: ${player.entity ? 'Yes' : 'No'}`,
       inline: true
     }));
-    sendChatEmbed('Player List', `${playerList.length} player(s) online`, DEFAULT_EMBED_COLOR, fields);
+    sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
     console.error('Error sending player list:', err.message);
   }
@@ -138,21 +140,23 @@ function sendPlayerList() {
 function sendBotStats() {
   if (!bot || !bot.entity) {
     return;
-  }
+}
   try {
     const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
-    const hours = Math.floor(uptime / 3600);
+const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
     const seconds = uptime % 60;
-    const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
+const uptimeStr = `${hours}h ${minutes}m ${seconds}s`;
     const position = bot.entity.position;
     const posStr = `X: ${Math.floor(position.x)}, Y: ${Math.floor(position.y)}, Z: ${Math.floor(position.z)}`;
-    const memoryUsage = process.memoryUsage();
+const memoryUsage = process.memoryUsage();
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
-    const ping = bot.player ? bot.player.ping : 'Unknown';
+const ping = bot.player ? bot.player.ping : 'Unknown';
 
     const gameModeDisplay = (bot?.gameMode === 3 || (bot?.gameMode === undefined && isBotOnline)) ?
-      'Spectator' : 'Unknown';
+'Spectator' : 'Unknown';
+
+    const onlinePlayersCount = getOnlinePlayersExcludingBot().length; // Use helper for consistency
 
     sendChatEmbed('Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
       { name: 'Uptime', value: uptimeStr, inline: true },
@@ -161,11 +165,13 @@ function sendBotStats() {
       { name: 'Memory Usage', value: memoryStr, inline: true },
       { name: 'Ping', value: `${ping}ms`, inline: true },
       { name: 'Movement Count', value: `${movementCount} moves`, inline: true },
-      { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
+      { name: 'Players Online', value: `${onlinePlayersCount} (excluding bot)`, inline: true }, // Added player count
+      { 
+name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
     ]);
-  } catch (err) {
+} catch (err) {
     console.error('Error sending bot stats:', err.message);
-  }
+}
 }
 
 function performMovement() {
@@ -173,39 +179,34 @@ function performMovement() {
   try {
     spectatorMovement();
     movementCount++;
-  } catch (err) {
+} catch (err) {
     console.error('Movement error:', err.message);
   }
 }
 
 function spectatorMovement() {
   const currentPos = bot.entity.position;
-  const action = Math.random();
-  if (action < 0.5) {
-    const x = currentPos.x + (Math.random() * 10 - 5);
-    const z = currentPos.z + (Math.random() * 10 - 5);
-    bot.entity.position.set(x, currentPos.y, z);
-  } else {
-    const x = currentPos.x + (Math.random() * 10 - 5);
-    const z = currentPos.z + (Math.random() * 10 - 5);
-    bot.entity.position.set(x, currentPos.y, z);
-  }
+const action = Math.random();
+  // Simplified movement logic: pick a random target within a 10-block radius
+  const targetX = currentPos.x + (Math.random() * 10 - 5);
+  const targetZ = currentPos.z + (Math.random() * 10 - 5);
+  bot.entity.position.set(targetX, currentPos.y, targetZ); // Set to new position
 }
 
 function lookAround() {
   if (!bot || !bot.entity) return;
   try {
     const yaw = Math.random() * Math.PI * 2;
-    const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
+const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
     bot.look(yaw, pitch, true);
-  } catch (err) {
+} catch (err) {
     console.error('Look error:', err.message);
   }
 }
 
 function setupIntervals() {
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
-  lookInterval = setInterval(lookAround, LOOK_INTERVAL);
+lookInterval = setInterval(lookAround, LOOK_INTERVAL);
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
   botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
   setTimeout(sendPlayerList, 5000);
@@ -220,7 +221,7 @@ function startBot() {
   }
 
   botStartTime = Date.now();
-  movementCount = 0;
+movementCount = 0;
   isBotOnline = false;
 
   bot = mineflayer.createBot(botOptions);
@@ -233,34 +234,33 @@ function startBot() {
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
+        // Log socket close events if needed for debugging
       });
     }
     setTimeout(() => {
       setupIntervals();
     }, 1000);
   });
-
-  bot.on('game', () => {
+bot.on('game', () => {
     if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
     } else {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered an unknown game mode (${bot.gameMode}).`, WARNING_EMBED_COLOR);
     }
   });
-
-  bot.on('end', (reason) => {
+bot.on('end', (reason) => {
     sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
     reconnectBot();
   });
-  bot.on('kicked', (reason) => {
+bot.on('kicked', (reason) => {
     sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
     reconnectBot();
   });
-  bot.on('error', (err) => {
+bot.on('error', (err) => {
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
 
     if (err.message.includes("timed out") ||
@@ -271,27 +271,30 @@ function startBot() {
       reconnectBot();
     }
   });
-  bot.on('chat', (username, message) => {
+bot.on('chat', (username, message) => {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
     }
   });
-  bot.on('playerJoined', (player) => {
+bot.on('playerJoined', (player) => {
     if (player.username !== botOptions.username) {
+      // Skin type handling for players starting with '.' (this seems custom)
       if (player.username.startsWith('.')) {
         player.skinType = Math.random() > 0.5 ? 'alex' : 'steve';
       }
-      const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
+      const onlinePlayersCount = getOnlinePlayersExcludingBot().length; // Use helper for consistency
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
-        { name: 'Current Players', value: `${onlinePlayers}`, inline: true }
+        { name: 'Current Players', value: `${onlinePlayersCount} (excluding bot)`, inline: true }
       ]);
     }
   });
-  bot.on('playerLeft', (player) => {
+bot.on('playerLeft', (player) => {
     if (player.username !== botOptions.username) {
-      const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length - 1 : 0;
+      // The player has already left, so the bot.players list will be updated.
+      // We can directly get the current count of players excluding the bot.
+      const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
-        { name: 'Current Players', value: `${Math.max(0, onlinePlayers)}`, inline: true }
+        { name: 'Current Players', value: `${Math.max(0, onlinePlayersCount)} (excluding bot)`, inline: true }
       ]);
     }
   });
@@ -312,16 +315,17 @@ app.get('/', (req, res) => {
 });
 app.get('/api/status', (req, res) => {
   try {
-    const players = bot?.players ? Object.values(bot.players).filter(p => p.username !== botOptions.username) : [];
-    const onlinePlayersCount = players.length;
-    const playerDetails = players.map(p => {
+    const playersExcludingBot = getOnlinePlayersExcludingBot();
+    const onlinePlayersCount = playersExcludingBot.length;
+    const playerDetails = playersExcludingBot.map(p => {
       let skinUrl;
       if (p.username.startsWith('.')) {
         skinUrl = `./${p.skinType || (Math.random() > 0.5 ? 'steve' : 'alex')}.png`;
       } else {
         skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
       }
-      return {
+     
+ return {
         username: p.username,
         uuid: p.uuid,
         skinUrl: skinUrl
@@ -334,8 +338,9 @@ app.get('/api/status', (req, res) => {
     const botStatus = {
       message: isBotOnline ?
         "Bot is running!" : "Bot is offline",
-      onlinePlayersCount,
-      playerDetails,
+      onlinePlayersCount: onlinePlayersCount, // Use consistent count
+  
+    playerDetails,
       gameMode: gameModeApiDisplay,
       position: bot?.entity?.position ?
         {
@@ -344,14 +349,14 @@ app.get('/api/status', (req, res) => {
           z: Math.floor(bot.entity.position.z)
         } : null,
       uptime: botStartTime && isBotOnline ?
-        Math.floor((Date.now() - botStartTime) / 1000) : 0,
+Math.floor((Date.now() - botStartTime) / 1000) : 0,
       movements: movementCount,
       memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
       lastOnline: lastOnlineTime,
       serverHost: currentServerHost,
       serverPort: currentServerPort,
     };
-    res.json(botStatus);
+res.json(botStatus);
   } catch (err) {
     res.status(500).json({ error: "Internal Server Error" });
   }
@@ -361,4 +366,4 @@ app.listen(WEB_SERVER_PORT, () => {
 });
 
 startBot();
-                                   
+         
