@@ -1,0 +1,638 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Leaf Dashboard</title>
+   <style>
+       * {
+           margin: 0;
+           padding: 0;
+           box-sizing: border-box;
+       }
+
+       :root {
+           --primary-bg: #faf9f5;
+           --secondary-bg: #ffffff;
+           --card-bg: #ffffff;
+           --border-color: #e5e7eb;
+           --text-primary: #1f2937;
+           --text-secondary: #6b7280;
+           --text-muted: #9ca3af;
+           --accent-color: #059669;
+           --accent-hover: #047857;
+           --success-color: #10b981;
+           --warning-color: #f59e0b;
+           --error-color: #ef4444;
+           --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+           --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+           --radius-sm: 0.375rem;
+           --radius-md: 0.5rem;
+           --radius-lg: 0.75rem;
+       }
+
+       body {
+           font-family: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+           background-color: var(--primary-bg);
+           color: var(--text-primary);
+           line-height: 1.6;
+           transition: all 0.2s ease;
+       }
+
+       .container {
+           max-width: 1200px;
+           margin: 0 auto;
+           padding: 0 1.5rem;
+       }
+
+       header {
+           background-color: var(--secondary-bg);
+           border-bottom: 1px solid var(--border-color);
+           padding: 1rem 0;
+           position: sticky;
+           top: 0;
+           z-index: 100;
+           backdrop-filter: blur(10px);
+       }
+
+       .header-content {
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+       }
+
+       .logo-section {
+           display: flex;
+           align-items: center;
+           gap: 0.75rem;
+       }
+
+       .logo {
+           width: 40px;
+           height: 40px;
+           border-radius: var(--radius-md);
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           overflow: hidden;
+       }
+
+       .logo img {
+           width: 100%;
+           height: 100%;
+           object-fit: cover;
+       }
+
+       .brand {
+           font-size: 1.5rem;
+           font-weight: 700;
+           color: var(--text-primary);
+       }
+
+       .status-indicator {
+           display: flex;
+           align-items: center;
+           gap: 0.5rem;
+           padding: 0.5rem 1rem;
+           background-color: var(--success-color);
+           color: white;
+           border-radius: var(--radius-md);
+           font-size: 0.875rem;
+           font-weight: 500;
+       }
+
+       .status-dot {
+           width: 8px;
+           height: 8px;
+           background-color: currentColor;
+           border-radius: 50%;
+           animation: pulse 2s infinite;
+       }
+
+       @keyframes pulse {
+           0%, 100% { opacity: 1; }
+           50% { opacity: 0.5; }
+       }
+
+       main {
+           padding: 2rem 0;
+       }
+
+       .hero-section {
+           text-align: center;
+           margin-bottom: 3rem;
+       }
+
+       .hero-title {
+           font-size: 2.5rem;
+           font-weight: 800;
+           margin-bottom: 0.5rem;
+           color: var(--text-primary);
+       }
+       .hero-subtitle {
+           font-size: 1.125rem;
+           color: var(--text-secondary);
+           margin-bottom: 1rem;
+       }
+
+       .stats-grid {
+           display: grid;
+           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+           gap: 1.5rem;
+           margin-bottom: 2rem;
+       }
+
+       .stat-card {
+           background-color: var(--card-bg);
+           border: 1px solid var(--border-color);
+           border-radius: var(--radius-lg);
+           padding: 1.5rem;
+           box-shadow: var(--shadow-sm);
+           transition: all 0.2s ease;
+       }
+
+       .stat-card:hover {
+           box-shadow: var(--shadow-md);
+           transform: translateY(-1px);
+       }
+
+       .stat-header {
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+           margin-bottom: 1rem;
+       }
+
+       .stat-title {
+           font-size: 0.875rem;
+           font-weight: 500;
+           color: var(--text-secondary);
+           text-transform: uppercase;
+           letter-spacing: 0.05em;
+       }
+
+       .stat-icon {
+           width: 20px;
+           height: 20px;
+           color: var(--accent-color);
+       }
+
+       .stat-value {
+           font-size: 2rem;
+           font-weight: 700;
+           color: var(--text-primary);
+           margin-bottom: 0.25rem;
+       }
+
+       .stat-label {
+           font-size: 0.875rem;
+           color: var(--text-muted);
+       }
+
+       .info-grid {
+           display: grid;
+           grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+           gap: 1.5rem;
+       }
+
+       .info-card {
+           background-color: var(--card-bg);
+           border: 1px solid var(--border-color);
+           border-radius: var(--radius-lg);
+           padding: 1.5rem;
+           box-shadow: var(--shadow-sm);
+       }
+
+       .info-card h3 {
+           font-size: 1.125rem;
+           font-weight: 600;
+           margin-bottom: 1rem;
+           display: flex;
+           align-items: center;
+           gap: 0.5rem;
+       }
+
+       .info-list {
+           list-style: none;
+       }
+
+       .info-item {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           padding: 0.75rem 0;
+           border-bottom: 1px solid var(--border-color);
+       }
+
+       .info-item:last-child {
+           border-bottom: 0;
+       }
+
+       .info-label {
+           font-size: 0.875rem;
+           color: var(--text-secondary);
+       }
+
+       .info-value {
+           font-size: 0.875rem;
+           font-weight: 500;
+           color: var(--text-primary);
+       }
+
+       .badge {
+           display: inline-flex;
+           align-items: center;
+           gap: 0.25rem;
+           padding: 0.25rem 0.75rem;
+           border-radius: var(--radius-sm);
+           font-size: 0.75rem;
+           font-weight: 500;
+           text-transform: uppercase;
+           letter-spacing: 0.05em;
+       }
+
+       .badge-success {
+           background-color: rgba(16, 185, 129, 0.1);
+           color: var(--success-color);
+       }
+
+       .badge-warning {
+           background-color: rgba(245, 158, 11, 0.1);
+           color: var(--warning-color);
+       }
+
+       .badge-error {
+           background-color: rgba(239, 68, 68, 0.1);
+           color: var(--error-color);
+       }
+
+       footer {
+           margin-top: 4rem;
+           padding: 2rem 0;
+           border-top: 1px solid var(--border-color);
+           text-align: center;
+           color: var(--text-muted);
+           font-size: 0.875rem;
+       }
+
+       .loading {
+           display: inline-block;
+           width: 1rem;
+           height: 1rem;
+           border: 2px solid var(--border-color);
+           border-radius: 50%;
+           border-top: 2px solid var(--accent-color);
+           animation: spin 1s linear infinite;
+       }
+
+       @keyframes spin {
+           0% { transform: rotate(0deg); }
+           100% { transform: rotate(360deg); }
+       }
+
+       .player-list-container {
+           margin-top: 1.5rem;
+           max-height: 200px;
+           overflow-y: auto;
+           padding-right: 10px;
+       }
+
+       .player-list-item {
+           display: flex;
+           align-items: center;
+           gap: 0.75rem;
+           padding: 0.5rem 0;
+           border-bottom: 1px dashed var(--border-color);
+       }
+
+       .player-list-item:last-child {
+           border-bottom: none;
+       }
+
+       .player-skin-face {
+           width: 24px;
+           height: 24px;
+           border-radius: 4px;
+           background-color: #f0f0f0;
+           flex-shrink: 0;
+       }
+
+       .player-skin-face img {
+           width: 100%;
+           height: 100%;
+           object-fit: cover;
+           border-radius: inherit;
+       }
+
+       @media (max-width: 768px) {
+           .hero-title {
+               font-size: 2rem;
+           }
+           
+           .stats-grid {
+               grid-template-columns: 1fr;
+           }
+           
+           .container {
+               padding: 0 1rem;
+           }
+       }
+   </style>
+</head>
+<body>
+   <header>
+       <div class="container">
+           <div class="header-content">
+               <div class="logo-section">
+                   <div class="logo" id="logo">
+                       <img src="./public/logo.png" alt="Leaf Logo" onerror="this.onerror=null;this.src='https://placehold.co/40x40/059669/ffffff?text=L';" />
+                   </div>
+                   <div class="brand">Leaf</div>
+               </div>
+               <div class="status-indicator" id="status-indicator">
+                   <div class="status-dot"></div>
+                   <span id="status-text">Loading...</span>
+               </div>
+           </div>
+       </div>
+   </header>
+
+   <main>
+       <div class="container">
+           <div class="hero-section">
+               <h1 class="hero-title">DASHBOARD</h1>
+               <p class="hero-subtitle">Real-time monitoring</p>
+           </div>
+
+           <div class="stats-grid">
+               <div class="stat-card">
+                   <div class="stat-header">
+                       <div class="stat-title">Online Players</div>
+                       <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
+                       </svg>
+                   </div>
+                   <div class="stat-value" id="player-count">
+                       <div class="loading"></div>
+                   </div>
+                   <div class="stat-label">Connected players</div>
+                   <div class="player-list-container" id="player-list-container">
+                       </div>
+               </div>
+
+               <div class="stat-card">
+                   <div class="stat-header">
+                       <div class="stat-title">Uptime</div>
+                       <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                       </svg>
+                   </div>
+                   <div class="stat-value" id="uptime">
+                       <div class="loading"></div>
+                   </div>
+                   <div class="stat-label">Time online</div>
+               </div>
+
+               <div class="stat-card">
+                   <div class="stat-header">
+                       <div class="stat-title">Movements</div>
+                       <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                       </svg>
+                   </div>
+                   <div class="stat-value" id="movements">
+                       <div class="loading"></div>
+                   </div>
+                   <div class="stat-label">Total actions</div>
+               </div>
+
+               <div class="stat-card">
+                   <div class="stat-header">
+                       <div class="stat-title">Memory Usage</div>
+                       <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                       </svg>
+                   </div>
+                   <div class="stat-value" id="memory">
+                       <div class="loading"></div>
+                   </div>
+                   <div class="stat-label">RAM consumption</div>
+               </div>
+           </div>
+
+           <div class="info-grid">
+               <div class="info-card">
+                   <h3>
+                       <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                       </svg>
+                       Bot Status
+                   </h3>
+                   <ul class="info-list">
+                       <li class="info-item">
+                           <span class="info-label">Game Mode</span>
+                           <span class="info-value" id="game-mode">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Position</span>
+                           <span class="info-value" id="position">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Y-Axis Limits</span>
+                           <span class="info-value" id="y-limits">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Below Min Y</span>
+                           <span class="info-value" id="below-min-y">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                   </ul>
+               </div>
+
+               <div class="info-card">
+                   <h3>
+                       <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                       </svg>
+                       Server Info
+                   </h3>
+                   <ul class="info-list">
+                       <li class="info-item">
+                           <span class="info-label">Server Address</span>
+                           <span class="info-value" id="server-address">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Waypoints</span>
+                           <span class="info-value" id="waypoints">
+                               <div class="loading"></div>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Status</span>
+                           <span class="info-value">
+                               <span class="badge badge-success" id="status-badge">
+                                   <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                                       <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                   </svg>
+                                   Online
+                               </span>
+                           </span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Last Updated</span>
+                           <span class="info-value" id="last-updated">Just now</span>
+                       </li>
+                       <li class="info-item">
+                           <span class="info-label">Last Online</span>
+                           <span class="info-value" id="last-online">Never</span>
+                       </li>
+                   </ul>
+               </div>
+           </div>
+       </div>
+   </main>
+
+   <footer>
+       <div class="container">
+           <p>© 2025 Leaf</p>
+       </div>
+   </footer>
+
+   <script>
+       function formatUptime(seconds) {
+           const hours = Math.floor(seconds / 3600);
+           const minutes = Math.floor((seconds % 3600) / 60);
+           const remainingSeconds = seconds % 60;
+           
+           if (hours > 0) {
+               return `${hours}h ${minutes}m`;
+           } else if (minutes > 0) {
+               return `${minutes}m ${remainingSeconds}s`;
+           } else {
+               return `${remainingSeconds}s`;
+           }
+       }
+
+       function updateStatus(data) {
+           const statusIndicator = document.getElementById('status-indicator');
+           const statusText = document.getElementById('status-text');
+           const statusBadge = document.getElementById('status-badge');
+           
+           if (data.message.includes('running')) {
+               statusIndicator.style.backgroundColor = '#10b981';
+               statusText.textContent = 'Online';
+               statusBadge.className = 'badge badge-success';
+               statusBadge.innerHTML = `
+                   <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                       <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                   </svg>
+                   Online
+               `;
+           } else {
+               statusIndicator.style.backgroundColor = '#ef4444';
+               statusText.textContent = 'Offline';
+               statusBadge.className = 'badge badge-error';
+               statusBadge.innerHTML = `
+                   <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                       <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                   </svg>
+                   Offline
+               `;
+           }
+
+           document.getElementById('player-count').textContent = data.onlinePlayersCount || 0;
+           document.getElementById('uptime').textContent = formatUptime(data.uptime || 0);
+           document.getElementById('movements').textContent = (data.movements || 0).toLocaleString();
+           document.getElementById('memory').textContent = data.memoryUsage || '0 MB';
+
+           document.getElementById('game-mode').textContent = data.gameMode || 'Unknown';
+           document.getElementById('position').textContent = data.position 
+               ? `${data.position.x}, ${data.position.y}, ${data.position.z}`
+               : 'Unknown';
+           document.getElementById('y-limits').textContent = data.yAxisLimits || '0-300';
+           
+           const belowMinY = document.getElementById('below-min-y');
+           if (data.belowMinY) {
+               belowMinY.innerHTML = '<span class="badge badge-warning">Yes</span>';
+           } else {
+               belowMinY.innerHTML = '<span class="badge badge-success">No</span>';
+           }
+
+           document.getElementById('waypoints').textContent = data.waypoints || 0;
+           document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+           document.getElementById('last-online').textContent = data.lastOnline ? new Date(data.lastOnline).toLocaleString() : 'Never';
+           document.getElementById('server-address').textContent = `${data.serverHost}:${data.serverPort}`;
+
+           const playerListContainer = document.getElementById('player-list-container');
+           playerListContainer.innerHTML = '';
+           if (data.playerDetails && data.playerDetails.length > 0) {
+               data.playerDetails.forEach(player => {
+                   const playerDiv = document.createElement('div');
+                   playerDiv.className = 'player-list-item';
+                   playerDiv.innerHTML = `
+                       <div class="player-skin-face">
+                           <img src="${player.skinUrl}" alt="${player.username} skin" onerror="this.onerror=null;this.src='https://crafatar.com/avatars/${Math.random() > 0.5 ? 'steve' : 'alex'}?size=24&overlay';">
+                       </div>
+                       <span>${player.username}</span>
+                   `;
+                   playerListContainer.appendChild(playerDiv);
+               });
+           } else {
+               playerListContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No players online</p>';
+           }
+       }
+
+       function handleError() {
+           const statusIndicator = document.getElementById('status-indicator');
+           const statusText = document.getElementById('status-text');
+           const statusBadge = document.getElementById('status-badge');
+           
+           statusIndicator.style.backgroundColor = '#ef4444';
+           statusText.textContent = 'Offline';
+           
+           statusBadge.className = 'badge badge-error';
+           statusBadge.innerHTML = `
+               <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+               </svg>
+               Offline
+           `;
+           document.getElementById('player-count').textContent = '0';
+           document.getElementById('uptime').textContent = '0s';
+           document.getElementById('movements').textContent = '0';
+           document.getElementById('memory').textContent = '0 MB';
+           document.getElementById('game-mode').textContent = 'Offline';
+           document.getElementById('position').textContent = 'N/A';
+           document.getElementById('below-min-y').innerHTML = '<span class="badge badge-error">N/A</span>';
+           document.getElementById('waypoints').textContent = '0';
+           document.getElementById('player-list-container').innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Bot is offline</p>';
+       }
+
+       async function fetchData() {
+           try {
+               const response = await fetch('/api/status');
+               if (!response.ok) {
+                   throw new Error(`HTTP error! status: ${response.status}`);
+               }
+               const data = await response.json();
+               updateStatus(data);
+           } catch (error) {
+               handleError();
+           }
+       }
+
+       fetchData();
+       setInterval(fetchData, 3000); // Fetch data every 3 seconds for real-time updates
+   </script>
+</body>
+</html>
