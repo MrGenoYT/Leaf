@@ -396,11 +396,22 @@ app.get('/api/status', (req, res) => {
   try {
     const players = bot?.players ? Object.values(bot.players).filter(p => p.username !== botOptions.username) : [];
     const onlinePlayersCount = players.length;
-    const playerDetails = players.map(p => ({
-      username: p.username,
-      uuid: p.uuid,
-      skinUrl: `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`
-    }));
+    const playerDetails = players.map(p => {
+      let skinUrl;
+      // Check if the username starts with '.' for Bedrock players
+      if (p.username.startsWith('.')) {
+        // For Bedrock players, use local steve.png or alex.png
+        skinUrl = Math.random() > 0.5 ? './steve.png' : './alex.png';
+      } else {
+        // For Java players, use Crafatar API for their skin
+        skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
+      }
+      return {
+        username: p.username,
+        uuid: p.uuid,
+        skinUrl: skinUrl
+      };
+    });
 
     // Determine game mode for API response: 3 for spectator, or "Spectator" if undefined but bot is online
     const gameModeApiDisplay = (bot?.gameMode === 3 || (bot?.gameMode === undefined && isBotOnline)) ? "Spectator" : "Unknown";
@@ -436,6 +447,4 @@ app.listen(WEB_SERVER_PORT, () => {
 });
 
 // Start the bot when the application initializes
-startBot();
-
-      
+startBot();  
