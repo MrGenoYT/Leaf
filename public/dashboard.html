@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
    <meta charset="UTF-8">
@@ -582,7 +582,7 @@
                    playerDiv.className = 'player-list-item';
                    playerDiv.innerHTML = `
                        <div class="player-skin-face">
-                           <img src="${player.skinUrl}" alt="${player.username} skin" onerror="this.onerror=null;this.src='https://crafatar.com/avatars/${Math.random() > 0.5 ? 'steve' : 'alex'}?size=24&overlay';">
+                           <img src="${player.skinUrl}" alt="${player.username} skin" onerror="this.onerror=null;this.src='./' + (Math.random() > 0.5 ? 'steve.png' : 'alex.png');">
                        </div>
                        <span>${player.username}</span>
                    `;
