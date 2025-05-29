@@ -204,9 +204,9 @@ function spectatorMovement() {
 
   if (action < 0.5) {
     // Fly to a nearby position
-    const x = currentPos.x + (Math.random() * 20 - 10);
-    const y = currentPos.y + (Math.random() * 10 - 5);
-    const z = currentPos.z + (Math.random() * 20 - 10);
+    const x = currentPos.x + (Math.random() * 10 - 5);
+    const y = currentPos.y + (Math.random() * 6 - 3);
+    const z = currentPos.z + (Math.random() * 10 - 5);
 
     // Ensure Y is within reasonable bounds (e.g., 5 to 250)
     const safeY = Math.max(5, Math.min(250, y));
