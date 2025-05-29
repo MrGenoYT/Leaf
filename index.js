@@ -303,7 +303,8 @@ function startBot() {
   });
 
   bot.on('game', () => {
-    console.log(`Game mode changed to: ${bot.gameMode}`);
+    // Added console log to inspect the actual gameMode value
+    console.log(`Game mode changed to: ${bot.gameMode} (Raw value: ${bot.gameMode})`);
     // Only log if game mode changes to spectator or something else
     if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
@@ -437,4 +438,4 @@ app.listen(WEB_SERVER_PORT, () => {
 });
 
 // Start the bot when the application initializes
-startBot();  
+startBot();                                
