@@ -167,8 +167,8 @@ function sendBotStats() {
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
     const ping = bot.player ? bot.player.ping : 'Unknown';
 
-    // Determine game mode: 3 for spectator, otherwise unknown
-    const gameModeDisplay = bot.gameMode === 3 ? 'Spectator' : 'Unknown';
+    // Determine game mode: 3 for spectator, or "Spectator" if undefined but bot is online
+    const gameModeDisplay = (bot?.gameMode === 3 || (bot?.gameMode === undefined && isBotOnline)) ? 'Spectator' : 'Unknown';
 
     sendChatEmbed('Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
       { name: 'Uptime', value: uptimeStr, inline: true },
@@ -280,15 +280,11 @@ function startBot() {
 
   bot.once('spawn', () => {
     console.log('Bot spawned successfully');
+    // Log the gameMode value right after spawn
+    console.log(`Game mode at spawn: ${bot.gameMode} (Raw value: ${bot.gameMode})`);
     sendDiscordEmbed('Bot Connected', `${botOptions.username} has joined the server.`, SUCCESS_EMBED_COLOR);
     isBotOnline = true;
     lastOnlineTime = Date.now();
-
-    // No pathfinder setup needed as only spectator mode is supported
-    // if (bot.gameMode !== 3) {
-    //   const defaultMove = new Movements(bot);
-    //   bot.pathfinder.setMovements(defaultMove);
-    // }
 
     // Setup socket keep alive for stable connection
     if (bot._client && bot._client.socket) {
@@ -298,13 +294,15 @@ function startBot() {
       });
     }
 
-    // Setup all recurring intervals
-    setupIntervals();
+    // Add a small delay before setting up intervals to allow gameMode to propagate
+    setTimeout(() => {
+        setupIntervals();
+    }, 1000); // 1 second delay
   });
 
   bot.on('game', () => {
-    // Added console log to inspect the actual gameMode value
-    console.log(`Game mode changed to: ${bot.gameMode} (Raw value: ${bot.gameMode})`);
+    // Removed the `console.log` for `game mode changed to: undefined` as we know it's undefined.
+    // console.log(`Game mode changed to: ${bot.gameMode} (Raw value: ${bot.gameMode})`);
     // Only log if game mode changes to spectator or something else
     if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
@@ -404,8 +402,8 @@ app.get('/api/status', (req, res) => {
       skinUrl: `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`
     }));
 
-    // Determine game mode for API response
-    const gameModeApiDisplay = bot?.gameMode === 3 ? "Spectator" : "Unknown";
+    // Determine game mode for API response: 3 for spectator, or "Spectator" if undefined but bot is online
+    const gameModeApiDisplay = (bot?.gameMode === 3 || (bot?.gameMode === undefined && isBotOnline)) ? "Spectator" : "Unknown";
 
     const botStatus = {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
@@ -438,4 +436,6 @@ app.listen(WEB_SERVER_PORT, () => {
 });
 
 // Start the bot when the application initializes
-startBot();                                
+startBot();
+
+      
