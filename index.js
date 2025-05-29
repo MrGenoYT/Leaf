@@ -1,7 +1,8 @@
 const mineflayer = require('mineflayer');
 const axios = require('axios');
-const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
-const Vec3 = require('vec3');
+// Removed pathfinder as it's no longer needed
+// const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+const Vec3 = require('vec3'); // Still useful for position handling
 const express = require('express');
 const path = require('path');
 const os = require('os');
@@ -18,8 +19,8 @@ const WEB_SERVER_PORT = process.env.PORT || 3000;
 const MOVEMENT_INTERVAL = 5000; // Move every 5 seconds
 const LOOK_INTERVAL = 3000; // Look around every 3 seconds
 const RECONNECT_DELAY = 10000;
-const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
-const BOT_STATS_INTERVAL = 60 * 60 * 1000;
+const PLAYER_LIST_INTERVAL = 30 * 60 * 1000; // Changed to 30 minutes
+const BOT_STATS_INTERVAL = 60 * 60 * 1000; // Changed to 1 hour
 
 const DEFAULT_EMBED_COLOR = 0x3498db;
 const SUCCESS_EMBED_COLOR = 0x00ff00;
@@ -46,9 +47,8 @@ let isBotOnline = false;
 let lastOnlineTime = null;
 let currentServerHost = BOT_HOST;
 let currentServerPort = BOT_PORT;
-let currentGameMode = 'Unknown'; // Track game mode separately
 
-// Clear all intervals
+// Clear all intervals to prevent multiple instances running
 function clearAllIntervals() {
   if (movementInterval) {
     clearInterval(movementInterval);
@@ -72,8 +72,12 @@ function clearAllIntervals() {
   }
 }
 
+// Function to send Discord embeds for general bot status
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
-  if (!DISCORD_WEBHOOK) return;
+  if (!DISCORD_WEBHOOK) {
+    console.warn('DISCORD_WEBHOOK is not set. Skipping Discord embed.');
+    return;
+  }
   try {
     await axios.post(DISCORD_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
@@ -83,8 +87,12 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
   }
 }
 
+// Function to send chat-related Discord embeds
 async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fields = []) {
-  if (!CHAT_WEBHOOK) return;
+  if (!CHAT_WEBHOOK) {
+    console.warn('CHAT_WEBHOOK is not set. Skipping chat embed.');
+    return;
+  }
   try {
     await axios.post(CHAT_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
@@ -94,8 +102,12 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
   }
 }
 
+// Function to send player messages to a Discord webhook
 async function sendPlayerMessage(username, message) {
-  if (username === botOptions.username || !MESSAGE_WEBHOOK) return;
+  if (username === botOptions.username || !MESSAGE_WEBHOOK) {
+    if (!MESSAGE_WEBHOOK) console.warn('MESSAGE_WEBHOOK is not set. Skipping player message.');
+    return;
+  }
   try {
     await axios.post(MESSAGE_WEBHOOK, {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
@@ -105,46 +117,44 @@ async function sendPlayerMessage(username, message) {
   }
 }
 
+// Function to send the current list of online players
 function sendPlayerList() {
-  if (!bot || !bot.players) return;
+  if (!bot || !bot.players) {
+    console.log('Bot or player list not available for player list update.');
+    return;
+  }
   try {
     const playerList = Object.keys(bot.players)
       .filter(name => name !== botOptions.username)
-      .map(name => ({ 
-        name: name, 
-        ping: bot.players[name].ping || 'N/A', 
-        entity: bot.players[name].entity ? 'Yes' : 'No' 
+      .map(name => ({
+        name: name,
+        ping: bot.players[name].ping || 'N/A',
+        entity: bot.players[name].entity ? 'Yes' : 'No'
       }));
 
     if (playerList.length === 0) {
       sendChatEmbed('Player List', 'No players online', DEFAULT_EMBED_COLOR);
       return;
     }
-    
-    const fields = playerList.map(player => ({ 
-      name: player.name, 
-      value: `Ping: ${player.ping}ms | In Range: ${player.entity}`, 
-      inline: true 
+
+    const fields = playerList.map(player => ({
+      name: player.name,
+      value: `Ping: ${player.ping}ms | In Range: ${player.entity}`,
+      inline: true
     }));
-    
+
     sendChatEmbed('Player List', `${playerList.length} player(s) online`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
     console.error('Error sending player list:', err.message);
   }
 }
 
-function getGameModeString(gameMode) {
-  switch(gameMode) {
-    case 0: return 'Survival';
-    case 1: return 'Creative';
-    case 2: return 'Adventure';
-    case 3: return 'Spectator';
-    default: return 'Unknown';
-  }
-}
-
+// Function to send detailed bot statistics
 function sendBotStats() {
-  if (!bot || !bot.entity) return;
+  if (!bot || !bot.entity) {
+    console.log('Bot or bot entity not available for bot stats update.');
+    return;
+  }
   try {
     const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
     const hours = Math.floor(uptime / 3600);
@@ -157,10 +167,13 @@ function sendBotStats() {
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
     const ping = bot.player ? bot.player.ping : 'Unknown';
 
+    // Determine game mode: 3 for spectator, otherwise unknown
+    const gameModeDisplay = bot.gameMode === 3 ? 'Spectator' : 'Unknown';
+
     sendChatEmbed('Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
       { name: 'Uptime', value: uptimeStr, inline: true },
       { name: 'Position', value: posStr, inline: true },
-      { name: 'Game Mode', value: currentGameMode, inline: true },
+      { name: 'Game Mode', value: gameModeDisplay, inline: true }, // Updated game mode display
       { name: 'Memory Usage', value: memoryStr, inline: true },
       { name: 'Ping', value: `${ping}ms`, inline: true },
       { name: 'Movement Count', value: `${movementCount} moves`, inline: true },
@@ -171,106 +184,49 @@ function sendBotStats() {
   }
 }
 
-// Setup or remove pathfinder based on game mode
-function setupPathfinder() {
-  if (!bot) return;
-  
-  if (currentGameMode === 'Spectator') {
-    // Don't set up pathfinder for spectator mode
-    console.log('Spectator mode detected - skipping pathfinder setup');
-    return;
-  }
-  
-  // Setup pathfinder for non-spectator modes
-  try {
-    const defaultMove = new Movements(bot);
-    bot.pathfinder.setMovements(defaultMove);
-    console.log(`Pathfinder configured for ${currentGameMode} mode`);
-  } catch (err) {
-    console.error('Error setting up pathfinder:', err.message);
-  }
-}
-
-// Simple movement function
+// Simple movement function for spectator mode
 function performMovement() {
   if (!bot || !bot.entity) return;
-  
+
   try {
-    if (currentGameMode === 'Spectator') {
-      // Spectator mode - simple flying (no pathfinding)
-      spectatorMovement();
-    } else {
-      // Survival/Creative mode - use pathfinding
-      survivalMovement();
-    }
+    // Only perform spectator movement as other modes are removed
+    spectatorMovement();
     movementCount++;
   } catch (err) {
     console.error('Movement error:', err.message);
   }
 }
 
+// Spectator mode movement: random flying within bounds
 function spectatorMovement() {
   const currentPos = bot.entity.position;
   const action = Math.random();
-  
+
   if (action < 0.5) {
     // Fly to a nearby position
     const x = currentPos.x + (Math.random() * 20 - 10);
     const y = currentPos.y + (Math.random() * 10 - 5);
     const z = currentPos.z + (Math.random() * 20 - 10);
-    
-    // Ensure Y is within reasonable bounds
+
+    // Ensure Y is within reasonable bounds (e.g., 5 to 250)
     const safeY = Math.max(5, Math.min(250, y));
-    
-    bot.entity.position.x = x;
-    bot.entity.position.y = safeY;
-    bot.entity.position.z = z;
-    
+
+    // Update bot's position directly for spectator mode
+    bot.entity.position.set(x, safeY, z);
+
     console.log(`Spectator fly to: ${Math.floor(x)}, ${Math.floor(safeY)}, ${Math.floor(z)}`);
   } else {
     // Just change altitude
     const newY = Math.max(5, Math.min(250, currentPos.y + (Math.random() * 20 - 10)));
-    bot.entity.position.y = newY;
+    bot.entity.position.set(currentPos.x, newY, currentPos.z);
     console.log(`Spectator altitude change to: ${Math.floor(newY)}`);
-  }
-}
-
-function survivalMovement() {
-  const currentPos = bot.entity.position;
-  const action = Math.random();
-  
-  if (action < 0.4) {
-    // Walk to nearby position using pathfinder
-    const x = Math.floor(currentPos.x + (Math.random() * 10 - 5));
-    const z = Math.floor(currentPos.z + (Math.random() * 10 - 5));
-    const goal = new goals.GoalBlock(x, Math.floor(currentPos.y), z);
-    
-    // Only use pathfinder if it's properly set up
-    if (bot.pathfinder && currentGameMode !== 'Spectator') {
-      bot.pathfinder.setGoal(goal);
-      console.log(`Walking to: ${x}, ${Math.floor(currentPos.y)}, ${z}`);
-    }
-  } else if (action < 0.7) {
-    // Jump
-    bot.setControlState('jump', true);
-    setTimeout(() => {
-      if (bot) bot.setControlState('jump', false);
-    }, 500);
-    console.log('Jumping');
-  } else {
-    // Sneak for a moment
-    bot.setControlState('sneak', true);
-    setTimeout(() => {
-      if (bot) bot.setControlState('sneak', false);
-    }, 2000);
-    console.log('Sneaking');
   }
 }
 
 // Simple look around function
 function lookAround() {
   if (!bot || !bot.entity) return;
-  
+
   try {
     const yaw = Math.random() * Math.PI * 2;
     const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6); // -30 to 30 degrees
@@ -284,42 +240,43 @@ function lookAround() {
 // Setup intervals after bot spawns
 function setupIntervals() {
   console.log('Setting up intervals...');
-  
-  // Movement interval
+
+  // Movement interval (for spectator mode)
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
-  
+
   // Look around interval
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
-  
+
   // Player list interval
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
-  
+
   // Bot stats interval
   botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
-  
-  // Send initial stats
+
+  // Send initial stats after a short delay
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
 }
 
+// Main function to start the bot and set up event listeners
 function startBot() {
   console.log('Starting bot...');
-  
-  // Clear everything first
+
+  // Clear any existing intervals and bot instances before starting a new one
   clearAllIntervals();
-  
+
   if (bot) {
     bot.removeAllListeners();
     bot = null;
   }
-  
+
   botStartTime = Date.now();
   movementCount = 0;
   isBotOnline = false;
-  currentGameMode = 'Unknown'; // Reset game mode
 
   bot = mineflayer.createBot(botOptions);
-  bot.loadPlugin(pathfinder);
+  // Pathfinder plugin is removed as it's no longer needed
+  // bot.loadPlugin(pathfinder);
 
   bot.once('spawn', () => {
     console.log('Bot spawned successfully');
@@ -327,12 +284,13 @@ function startBot() {
     isBotOnline = true;
     lastOnlineTime = Date.now();
 
-    // Update game mode and setup pathfinder accordingly
-    currentGameMode = getGameModeString(bot.gameMode);
-    console.log(`Current game mode: ${currentGameMode}`);
-    setupPathfinder();
+    // No pathfinder setup needed as only spectator mode is supported
+    // if (bot.gameMode !== 3) {
+    //   const defaultMove = new Movements(bot);
+    //   bot.pathfinder.setMovements(defaultMove);
+    // }
 
-    // Setup socket keep alive
+    // Setup socket keep alive for stable connection
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
@@ -340,30 +298,25 @@ function startBot() {
       });
     }
 
-    // Setup all intervals
+    // Setup all recurring intervals
     setupIntervals();
   });
 
   bot.on('game', () => {
-    const previousGameMode = currentGameMode;
-    currentGameMode = getGameModeString(bot.gameMode);
-    console.log(`Game mode changed from ${previousGameMode} to: ${currentGameMode}`);
-    
-    if (currentGameMode === 'Spectator') {
+    console.log(`Game mode changed to: ${bot.gameMode}`);
+    // Only log if game mode changes to spectator or something else
+    if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
     } else {
-      sendDiscordEmbed('Mode Change', `${botOptions.username} entered ${currentGameMode} mode.`, INFO_EMBED_COLOR);
+      sendDiscordEmbed('Mode Change', `${botOptions.username} entered an unknown game mode (${bot.gameMode}).`, WARNING_EMBED_COLOR);
     }
-    
-    // Setup or remove pathfinder based on new game mode
-    setupPathfinder();
+    // No pathfinder setup needed here either
   });
 
   bot.on('end', (reason) => {
     console.log('Bot disconnected:', reason);
     sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
-    currentGameMode = 'Unknown';
     clearAllIntervals();
     reconnectBot();
   });
@@ -372,7 +325,6 @@ function startBot() {
     console.log('Bot kicked:', reason);
     sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
-    currentGameMode = 'Unknown';
     clearAllIntervals();
     reconnectBot();
   });
@@ -380,11 +332,11 @@ function startBot() {
   bot.on('error', (err) => {
     console.error('Bot error:', err.message);
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
-    
+
     // Handle specific errors that require reconnection
-    if (err.message.includes("timed out") || 
-        err.message.includes("ECONNRESET") || 
-        err.name === 'PartialReadError' || 
+    if (err.message.includes("timed out") ||
+        err.message.includes("ECONNRESET") ||
+        err.name === 'PartialReadError' ||
         err.message.includes("Unexpected buffer end")) {
       clearAllIntervals();
       reconnectBot();
@@ -409,6 +361,7 @@ function startBot() {
 
   bot.on('playerLeft', (player) => {
     if (player.username !== botOptions.username) {
+      // Subtract 1 from current players for the player who just left
       const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length - 1 : 0;
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
         { name: 'Current Players', value: `${Math.max(0, onlinePlayers)}`, inline: true }
@@ -417,25 +370,29 @@ function startBot() {
   });
 }
 
+// Function to handle bot reconnection attempts
 function reconnectBot() {
   console.log('Attempting to reconnect...');
   clearAllIntervals();
-  
+
   reconnectTimeout = setTimeout(() => {
     console.log('Reconnecting now...');
     startBot();
   }, RECONNECT_DELAY);
 }
 
-// Web server
+// Web server setup for API status endpoint
 const app = express();
 
+// Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve the dashboard HTML file at the root URL
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// API endpoint to get bot status
 app.get('/api/status', (req, res) => {
   try {
     const players = bot?.players ? Object.values(bot.players).filter(p => p.username !== botOptions.username) : [];
@@ -446,11 +403,14 @@ app.get('/api/status', (req, res) => {
       skinUrl: `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`
     }));
 
+    // Determine game mode for API response
+    const gameModeApiDisplay = bot?.gameMode === 3 ? "Spectator" : "Unknown";
+
     const botStatus = {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
       onlinePlayersCount,
       playerDetails,
-      gameMode: currentGameMode,
+      gameMode: gameModeApiDisplay, // Updated game mode display for API
       position: bot?.entity?.position ? {
         x: Math.floor(bot.entity.position.x),
         y: Math.floor(bot.entity.position.y),
@@ -470,10 +430,11 @@ app.get('/api/status', (req, res) => {
   }
 });
 
+// Start the web server
 app.listen(WEB_SERVER_PORT, () => {
   console.log(`Web server started on port ${WEB_SERVER_PORT}`);
   sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
-// Start the bot
-startBot();
+// Start the bot when the application initializes
+startBot();  
