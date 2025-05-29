@@ -351,6 +351,11 @@ function startBot() {
 
   bot.on('playerJoined', (player) => {
     if (player.username !== botOptions.username) {
+      // If it's a Bedrock player, assign a random skin type once
+      if (player.username.startsWith('.')) {
+        player.skinType = Math.random() > 0.5 ? 'alex' : 'steve';
+        console.log(`Assigned ${player.skinType} skin to Bedrock player: ${player.username}`);
+      }
       const onlinePlayers = bot?.players ? Object.keys(bot.players).filter(name => name !== botOptions.username).length : 0;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
         { name: 'Current Players', value: `${onlinePlayers}`, inline: true }
@@ -400,8 +405,8 @@ app.get('/api/status', (req, res) => {
       let skinUrl;
       // Check if the username starts with '.' for Bedrock players
       if (p.username.startsWith('.')) {
-        // For Bedrock players, use local steve.png or alex.png
-        skinUrl = Math.random() > 0.5 ? './steve.png' : './alex.png';
+        // For Bedrock players, use their assigned skinType. Fallback to random if not set.
+        skinUrl = `./${p.skinType || (Math.random() > 0.5 ? 'steve' : 'alex')}.png`;
       } else {
         // For Java players, use Crafatar API for their skin
         skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
@@ -447,4 +452,4 @@ app.listen(WEB_SERVER_PORT, () => {
 });
 
 // Start the bot when the application initializes
-startBot();  
+startBot();
