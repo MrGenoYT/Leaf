@@ -523,4 +523,7 @@ app.listen(WEB_SERVER_PORT, () => {
  sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
-startBot();
+setTimeout(() => {
+  sendDiscordEmbed('Startup Delay', 'Delaying bot start by 45s due to Render free-tier cold start.', WARNING_EMBED_COLOR);
+  startBot();
+}, 45000);
