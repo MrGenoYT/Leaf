@@ -31,6 +31,8 @@ const WARNING_EMBED_COLOR = 0xff9900;
 const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
 
+const FACES = ['steve.png', 'alex.png', 'lucy.png', 'ken.png', 'burrito.png', 'kaji.png', 'rusty.png', 'doon.png'];
+
 const botOptions = {
   host: BOT_HOST,
   port: BOT_PORT,
@@ -70,6 +72,12 @@ const chatSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
+
+const playerFaceSchema = new mongoose.Schema({
+  username: { type: String, unique: true },
+  face: String
+});
+const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
 
 function clearAllIntervals() {
   if (movementInterval) {
@@ -297,7 +305,6 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        // Save username with .prefix if it's a bedrock player
         const chatMessage = new MinecraftChat({ username, chat: message });
         await chatMessage.save();
         io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp });
@@ -307,10 +314,24 @@ function startBot() {
     }
   });
 
-  bot.on('playerJoined', (player) => {
+  bot.on('playerJoined', async (player) => {
     if (player.username !== botOptions.username) {
       if (player.username.startsWith('.')) {
-        player.skinType = Math.random() > 0.5 ? 'alex' : 'steve';
+        let playerFace = await PlayerFace.findOne({ username: player.username });
+        if (!playerFace) {
+          const assignedFaces = await PlayerFace.find({}, 'face');
+          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
+
+          let selectedFace;
+          if (availableFaces.length > 0) {
+            selectedFace = availableFaces[0];
+          } else {
+            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+          }
+          playerFace = new PlayerFace({ username: player.username, face: selectedFace });
+          await playerFace.save();
+        }
+        player.skinType = playerFace.face.replace('.png', '');
       }
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
@@ -360,10 +381,11 @@ app.get('/api/status', async (req, res) => {
   try {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
-    const playerDetails = playersExcludingBot.map(p => {
+    const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
       let skinUrl;
       if (p.username.startsWith('.')) {
-        skinUrl = `./${p.skinType || (Math.random() > 0.5 ? 'steve' : 'alex')}.png`;
+        const playerFace = await PlayerFace.findOne({ username: p.username });
+        skinUrl = `./${playerFace ? playerFace.face : FACES[Math.floor(Math.random() * FACES.length)]}`;
       } else {
         skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
       }
@@ -373,7 +395,7 @@ app.get('/api/status', async (req, res) => {
         skinUrl: skinUrl,
         ping: p.ping || 'N/A'
       };
-    });
+    }));
 
     const gameModeApiDisplay = "Spectator";
 
@@ -471,10 +493,11 @@ setInterval(async () => {
   try {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
-    const playerDetails = playersExcludingBot.map(p => {
+    const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
       let skinUrl;
       if (p.username.startsWith('.')) {
-        skinUrl = `./${p.skinType || (Math.random() > 0.5 ? 'steve' : 'alex')}.png`;
+        const playerFace = await PlayerFace.findOne({ username: p.username });
+        skinUrl = `./${playerFace ? playerFace.face : FACES[Math.floor(Math.random() * FACES.length)]}`;
       } else {
         skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
       }
@@ -484,7 +507,7 @@ setInterval(async () => {
         skinUrl: skinUrl,
         ping: p.ping || 'N/A'
       };
-    });
+    }));
 
     let diskInfo = { free: 0, total: 0 };
     try {
