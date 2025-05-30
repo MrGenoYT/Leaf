@@ -1,0 +1,1304 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>LEAF Dashboard</title>
+ <link rel="icon" href="./logo.png" type="image/png">
+ <script src="/socket.io/socket.io.js"></script>
+ <style>
+     * {
+         margin: 0;
+         padding: 0;
+         box-sizing: border-box;
+     }
+
+     :root {
+         --primary-bg: #faf9f5;
+         --secondary-bg: #ffffff;
+         --card-bg: #ffffff;
+         --border-color: #e5e7eb;
+         --text-primary: #1f2937;
+         --text-secondary: #6b7280;
+         --text-muted: #9ca3af;
+         --accent-color: #059669;
+         --accent-hover: #047857;
+         --success-color: #10b981;
+         --warning-color: #f59e0b;
+         --error-color: #ef4444;
+         --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+         --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+         --radius-sm: 0.375rem;
+         --radius-md: 0.5rem;
+         --radius-lg: 0.75rem;
+         --header-footer-bg: #1a1a1a; /* Dark black for header/footer */
+         --header-footer-text: #ffffff;
+     }
+
+     body {
+         font-family: "Inter", -apple-system, BlinkMacMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+         background-color: var(--primary-bg);
+         color: var(--text-primary);
+         line-height: 1.6;
+         transition: all 0.2s ease;
+     }
+
+     .container {
+         max-width: 1200px;
+         margin: 0 auto;
+         padding: 0 1.5rem;
+     }
+
+     header {
+         background-color: var(--header-footer-bg);
+         border-bottom: 1px solid var(--border-color);
+         padding: 1rem 0;
+         position: sticky;
+         top: 0;
+         z-index: 100;
+         backdrop-filter: blur(10px);
+         color: var(--header-footer-text);
+     }
+
+     .header-content {
+         display: flex;
+         align-items: center;
+         justify-content: space-between;
+     }
+
+     .logo-section {
+         display: flex;
+         align-items: center;
+         gap: 0.75rem;
+     }
+
+     .logo {
+         width: 40px;
+         height: 40px;
+         border-radius: var(--radius-md);
+         display: flex;
+         align-items: center;
+         justify-content: center;
+         overflow: hidden;
+     }
+
+     .logo img {
+         width: 100%;
+         height: 100%;
+         object-fit: cover;
+     }
+
+     .brand {
+         font-size: 1.5rem;
+         font-weight: 700;
+         color: var(--header-footer-text);
+     }
+
+     .status-indicator {
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+         padding: 0.5rem 1rem;
+         background-color: var(--success-color);
+         color: white;
+         border-radius: var(--radius-md);
+         font-size: 0.875rem;
+         font-weight: 500;
+     }
+
+     .status-dot {
+         width: 8px;
+         height: 8px;
+         background-color: currentColor;
+         border-radius: 50%;
+         animation: pulse 2s infinite;
+     }
+
+     @keyframes pulse {
+         0%, 100% { opacity: 1; }
+         50% { opacity: 0.5; }
+     }
+
+     main {
+         padding: 2rem 0;
+     }
+
+     .hero-section {
+         text-align: center;
+         margin-bottom: 3rem;
+     }
+
+     .hero-title {
+         font-size: 2.5rem;
+         font-weight: 800;
+         margin-bottom: 0.5rem;
+         color: var(--text-primary);
+     }
+     .hero-subtitle {
+         font-size: 1.125rem;
+         color: var(--text-secondary);
+         margin-bottom: 1rem;
+     }
+
+     .stats-grid {
+         display: grid;
+         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+         gap: 1.5rem;
+         margin-bottom: 2rem;
+     }
+
+     .stat-card {
+         background-color: var(--card-bg);
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-lg);
+         padding: 1.5rem;
+         box-shadow: var(--shadow-sm);
+         transition: all 0.2s ease;
+     }
+
+     .stat-card:hover {
+         box-shadow: var(--shadow-md);
+         transform: translateY(-1px);
+     }
+
+     .stat-header {
+         display: flex;
+         align-items: center;
+         justify-content: space-between;
+         margin-bottom: 1rem;
+     }
+
+     .stat-title {
+         font-size: 0.875rem;
+         font-weight: 500;
+         color: var(--text-secondary);
+         text-transform: uppercase;
+         letter-spacing: 0.05em;
+     }
+
+     .stat-icon {
+         width: 20px;
+         height: 20px;
+         color: var(--accent-color);
+     }
+
+     .stat-value {
+         font-size: 2rem;
+         font-weight: 700;
+         color: var(--text-primary);
+         margin-bottom: 0.25rem;
+     }
+
+     .stat-label {
+         font-size: 0.875rem;
+         color: var(--text-muted);
+     }
+
+     .info-grid {
+         display: grid;
+         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+         gap: 1.5rem;
+         margin-bottom: 2rem;
+     }
+
+     .info-card {
+         background-color: var(--card-bg);
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-lg);
+         padding: 1.5rem;
+         box-shadow: var(--shadow-sm);
+     }
+
+     .info-card h3 {
+         font-size: 1.125rem;
+         font-weight: 600;
+         margin-bottom: 1rem;
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+     }
+
+     .info-list {
+         list-style: none;
+     }
+
+     .info-item {
+         display: flex;
+         justify-content: space-between;
+         align-items: center;
+         padding: 0.75rem 0;
+         border-bottom: 1px solid var(--border-color);
+     }
+
+     .info-item:last-child {
+         border-bottom: 0;
+     }
+
+     .info-label {
+         font-size: 0.875rem;
+         color: var(--text-secondary);
+     }
+
+     .info-value {
+         font-size: 0.875rem;
+         font-weight: 500;
+         color: var(--text-primary);
+     }
+
+     .badge {
+         display: inline-flex;
+         align-items: center;
+         gap: 0.25rem;
+         padding: 0.25rem 0.75rem;
+         border-radius: var(--radius-sm);
+         font-size: 0.75rem;
+         font-weight: 500;
+         text-transform: uppercase;
+         letter-spacing: 0.05em;
+     }
+
+     .badge-success {
+         background-color: rgba(16, 185, 129, 0.1);
+         color: var(--success-color);
+     }
+
+     .badge-warning {
+         background-color: rgba(245, 158, 11, 0.1);
+         color: var(--warning-color);
+     }
+
+     .badge-error {
+         background-color: rgba(239, 68, 68, 0.1);
+         color: var(--error-color);
+     }
+
+     footer {
+         margin-top: 4rem;
+         padding: 2rem 0;
+         border-top: 1px solid var(--border-color);
+         text-align: center;
+         color: var(--header-footer-text);
+         font-weight: 700; /* Match header font-weight */
+     }
+
+     footer .logo-footer {
+         width: 30px; /* Increased size */
+         height: 30px; /* Increased size */
+         vertical-align: middle;
+         margin-right: 8px; /* Increased margin */
+     }
+
+     footer .brand-footer {
+         font-size: 1.25rem; /* Increased font size */
+         font-weight: 700;
+         color: var(--header-footer-text);
+         vertical-align: middle;
+     }
+
+     .loading {
+         display: inline-block;
+         width: 1rem;
+         height: 1rem;
+         border: 2px solid var(--border-color);
+         border-radius: 50%;
+         border-top: 2px solid var(--accent-color);
+         animation: spin 1s linear infinite;
+     }
+
+     @keyframes spin {
+         0% { transform: rotate(0deg); }
+         100% { transform: rotate(360deg); }
+     }
+
+     .player-list-container {
+         margin-top: 1.5rem;
+         max-height: 200px;
+         overflow-y: auto;
+         padding-right: 10px;
+     }
+
+     .player-list-item {
+         display: flex;
+         align-items: center;
+         gap: 0.75rem;
+         padding: 0.5rem 0;
+         border-bottom: 1px dashed var(--border-color);
+     }
+
+     .player-list-item:last-child {
+         border-bottom: none;
+     }
+
+     .player-skin-face {
+         width: 24px;
+         height: 24px;
+         border-radius: 4px;
+         background-color: #f0f0f0;
+         flex-shrink: 0;
+     }
+
+     .player-skin-face img {
+         width: 100%;
+         height: 100%;
+         object-fit: cover;
+         border-radius: inherit;
+     }
+
+     .admin-panel-card {
+         background-color: var(--card-bg);
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-lg);
+         padding: 1.5rem;
+         box-shadow: var(--shadow-sm);
+         margin-top: 2rem;
+     }
+
+     .admin-panel-card h3 {
+         font-size: 1.125rem;
+         font-weight: 600;
+         margin-bottom: 1rem;
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+     }
+
+     .admin-button-group {
+         display: flex;
+         flex-direction: column;
+         gap: 1rem;
+     }
+
+     .command-button {
+         background-color: var(--accent-color);
+         color: white;
+         padding: 0.75rem 1.5rem;
+         border: 1px solid var(--accent-color);
+         border-radius: var(--radius-md);
+         font-size: 1rem;
+         font-weight: 600;
+         cursor: pointer;
+         transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+         width: 100%; /* Ensure buttons take full width within their container */
+         justify-content: center;
+     }
+
+     .command-button:hover {
+         background-color: var(--accent-hover);
+         transform: translateY(-2px);
+         box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+     }
+
+     .command-button:active {
+         transform: translateY(0);
+         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+     }
+
+     .command-button:disabled {
+         background-color: #cccccc;
+         border-color: #cccccc;
+         cursor: not-allowed;
+         box-shadow: none;
+         transform: none;
+     }
+
+     .chat-section {
+         background-color: var(--card-bg);
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-lg);
+         padding: 1.5rem;
+         box-shadow: var(--shadow-sm);
+         margin-top: 2rem;
+     }
+
+     .chat-header {
+         margin-bottom: 1rem;
+     }
+
+     .chat-header h3 {
+         font-size: 1.125rem;
+         font-weight: 600;
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+         margin-bottom: 1rem;
+     }
+
+     .chat-controls {
+         display: flex;
+         flex-direction: column;
+         gap: 0.75rem;
+         margin-bottom: 1rem;
+     }
+
+     .chat-search-container {
+         position: relative;
+         width: 100%;
+     }
+
+     .chat-search-container input[type="search"] {
+         width: 100%;
+         padding: 0.75rem 0.75rem 0.75rem 2.5rem; /* Adjusted padding for height */
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-md);
+         font-size: 0.875rem;
+         color: var(--text-primary);
+         background-color: var(--primary-bg);
+     }
+
+     .chat-search-container .search-icon {
+         position: absolute;
+         left: 0.75rem;
+         top: 50%;
+         transform: translateY(-50%);
+         color: var(--text-muted);
+         width: 18px;
+         height: 18px;
+     }
+
+     .chat-filter-buttons {
+         display: flex;
+         gap: 0.5rem;
+         width: 100%;
+     }
+
+     .chat-filter-buttons button,
+     .chat-filter-buttons .date-picker-wrapper {
+         flex: 1;
+         display: flex;
+         align-items: center;
+         justify-content: center;
+         padding: 0.75rem 0.75rem; /* Adjusted padding for height */
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-md);
+         font-size: 0.875rem;
+         color: var(--text-primary);
+         background-color: var(--primary-bg);
+         cursor: pointer;
+         transition: background-color 0.2s ease;
+     }
+
+     .chat-filter-buttons button:hover,
+     .chat-filter-buttons .date-picker-wrapper:hover {
+         background-color: var(--border-color);
+     }
+
+     .date-picker-wrapper {
+         position: relative;
+         display: flex;
+         align-items: center;
+         justify-content: center;
+         gap: 0.5rem;
+     }
+
+     .date-picker-wrapper input[type="date"] {
+         position: absolute;
+         top: 0;
+         left: 0;
+         width: 100%;
+         height: 100%;
+         opacity: 0;
+         cursor: pointer;
+     }
+
+     .date-picker-wrapper .calendar-icon {
+         position: relative; /* Changed from absolute to relative */
+         top: 2px; /* Adjusted position */
+         color: var(--text-muted);
+         width: 18px;
+         height: 18px;
+     }
+
+     .date-picker-wrapper .date-text {
+         font-weight: 500; /* Made text bold */
+     }
+
+     .date-picker-wrapper .vertical-border {
+         height: 1.2em; /* Adjust as needed */
+         width: 1px;
+         background-color: var(--border-color);
+         margin: 0 0.25rem;
+     }
+
+     .chat-messages {
+         max-height: 400px;
+         overflow-y: auto;
+         border: 1px solid var(--border-color);
+         border-radius: var(--radius-md);
+         padding: 1rem;
+         background-color: var(--primary-bg);
+     }
+
+     .chat-message-item {
+         display: flex;
+         align-items: flex-start;
+         gap: 0.75rem;
+         margin-bottom: 1rem;
+     }
+
+     .chat-message-item:last-child {
+         margin-bottom: 0;
+     }
+
+     .chat-avatar {
+         width: 32px;
+         height: 32px;
+         border-radius: 50%;
+         flex-shrink: 0;
+         overflow: hidden;
+         background-color: #f0f0f0;
+     }
+
+     .chat-avatar img {
+         width: 100%;
+         height: 100%;
+         object-fit: cover;
+     }
+
+     .chat-content {
+         flex-grow: 1;
+     }
+
+     .chat-username {
+         font-weight: 600;
+         color: var(--text-primary);
+         margin-bottom: 0.25rem;
+     }
+
+     .chat-text {
+         color: var(--text-secondary);
+         word-wrap: break-word;
+     }
+
+     .chat-timestamp {
+         font-size: 0.75rem;
+         color: var(--text-muted);
+         margin-top: 0.25rem;
+         text-align: right;
+     }
+
+     .minecraft-time-display {
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+         flex-wrap: wrap; /* Allow wrapping for smaller screens */
+     }
+
+     .minecraft-time-display .time-icon-text {
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+     }
+
+     .minecraft-time-icon {
+         width: 24px;
+         height: 24px;
+         color: var(--accent-color);
+     }
+
+     /* Responsive adjustments */
+     @media (min-width: 768px) {
+         .stats-grid {
+             grid-template-columns: repeat(4, 1fr); /* 4 columns for desktop */
+         }
+
+         .info-grid {
+             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); /* Keep flexible */
+         }
+
+         /* Stretch Memory Usage to align with Movements */
+         .stats-grid > :nth-child(4) { /* Memory Usage card */
+             grid-column: span 1; /* Ensure it takes 1 column */
+         }
+
+         /* Stretch Minecraft Game Data to full width */
+         .info-grid > :nth-child(3) { /* Minecraft Game Data card */
+             grid-column: span 2; /* Take 2 columns */
+         }
+         
+         .chat-controls {
+             flex-direction: row; /* Horizontal for desktop */
+             justify-content: space-between;
+             align-items: center; /* Align items vertically */
+         }
+
+         .chat-search-container {
+             flex: 1; /* Allow search to grow */
+             max-width: calc(100% - 220px); /* Decrease width slightly */
+         }
+
+         .chat-filter-buttons {
+             width: auto; /* Reset width for horizontal layout */
+             flex: none; /* Don't grow */
+         }
+     }
+
+     @media (max-width: 767px) {
+         .hero-title {
+             font-size: 2rem;
+         }
+         
+         .stats-grid {
+             grid-template-columns: 1fr;
+         }
+         
+         .container {
+             padding: 0 1rem;
+         }
+
+         .chat-controls {
+             flex-direction: column;
+             align-items: stretch;
+         }
+
+         footer .logo-footer {
+             width: 25px; /* Slightly smaller for mobile */
+             height: 25px;
+             margin-right: 5px;
+         }
+
+         footer .brand-footer {
+             font-size: 1.1rem; /* Slightly smaller for mobile */
+         }
+     }
+ </style>
+</head>
+<body>
+ <header>
+     <div class="container">
+         <div class="header-content">
+             <div class="logo-section">
+                 <div class="logo" id="logo">
+                     <img src="./logo.png" alt="Leaf Logo" onerror="this.onerror=null;this.src='https://placehold.co/40x40/059669/ffffff?text=L';" />
+                 </div>
+                 <div class="brand">LEAF</div>
+             </div>
+             <div class="status-indicator" id="status-indicator">
+                 <div class="status-dot"></div>
+                 <span id="status-text">Loading...</span>
+             </div>
+         </div>
+     </div>
+ </header>
+
+ <main>
+     <div class="container">
+         <div class="hero-section">
+             <h1 class="hero-title">DASHBOARD</h1>
+             <p class="hero-subtitle">Real-time monitoring</p>
+         </div>
+
+         <div class="stats-grid">
+             <div class="stat-card">
+                 <div class="stat-header">
+                     <div class="stat-title">Online Players</div>
+                     <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
+                     </svg>
+                 </div>
+                 <div class="stat-value" id="player-count">
+                     <div class="loading"></div>
+                 </div>
+                 <div class="stat-label">Connected players</div>
+                 <div class="player-list-container" id="player-list-container">
+                 </div>
+             </div>
+
+             <div class="stat-card">
+                 <div class="stat-header">
+                     <div class="stat-title">Uptime</div>
+                     <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                     </svg>
+                 </div>
+                 <div class="stat-value" id="uptime">
+                     <div class="loading"></div>
+                 </div>
+                 <div class="stat-label">Time online</div>
+             </div>
+
+             <div class="stat-card">
+                 <div class="stat-header">
+                     <div class="stat-title">Movements</div>
+                     <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                     </svg>
+                 </div>
+                 <div class="stat-value" id="movements">
+                     <div class="loading"></div>
+                 </div>
+                 <div class="stat-label">Total actions</div>
+             </div>
+
+             <div class="stat-card">
+                 <div class="stat-header">
+                     <div class="stat-title">Memory Usage</div>
+                     <svg class="stat-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                     </svg>
+                 </div>
+                 <div class="stat-value" id="memory">
+                     <div class="loading"></div>
+                 </div>
+                 <div class="stat-label">RAM consumption</div>
+             </div>
+         </div>
+
+         <div class="info-grid">
+             <div class="info-card">
+                 <h3>
+                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                     </svg>
+                     Bot Status
+                 </h3>
+                 <ul class="info-list">
+                     <li class="info-item">
+                         <span class="info-label">Bot Name</span>
+                         <span class="info-value" id="bot-name">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Game Mode</span>
+                         <span class="info-value" id="game-mode">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Position (X, Y, Z)</span>
+                         <span class="info-value" id="position">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Health</span>
+                         <span class="info-value" id="bot-health">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Food</span>
+                         <span class="info-value" id="bot-food">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Network Latency</span>
+                         <span class="info-value" id="bot-latency">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                 </ul>
+             </div>
+
+             <div class="info-card">
+                 <h3>
+                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                     </svg>
+                     Server Info
+                 </h3>
+                 <ul class="info-list">
+                     <li class="info-item">
+                         <span class="info-label">Server IP</span>
+                         <span class="info-value" id="server-ip">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Server Port</span>
+                         <span class="info-value" id="server-port">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Server Load (1m)</span>
+                         <span class="info-value" id="server-load">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">CPU Usage</span>
+                         <span class="info-value" id="cpu-usage">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Disk Free</span>
+                         <span class="info-value" id="disk-free">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Disk Total</span>
+                         <span class="info-value" id="disk-total">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Status</span>
+                         <span class="info-value">
+                             <span class="badge badge-success" id="status-badge">
+                                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                 </svg>
+                                 Online
+                             </span>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Last Updated</span>
+                         <span class="info-value" id="last-updated">Just now</span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Last Online</span>
+                         <span class="info-value" id="last-online">Never</span>
+                     </li>
+                 </ul>
+             </div>
+
+             <div class="info-card">
+                 <h3>
+                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                     </svg>
+                     Minecraft Game Data
+                 </h3>
+                 <ul class="info-list">
+                     <li class="info-item">
+                         <span class="info-label">Minecraft Day</span>
+                         <span class="info-value" id="minecraft-day">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Minecraft Time</span>
+                         <span class="info-value" id="minecraft-time">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                     <li class="info-item">
+                         <span class="info-label">Server Difficulty</span>
+                         <span class="info-value" id="server-difficulty">
+                             <div class="loading"></div>
+                         </span>
+                     </li>
+                 </ul>
+             </div>
+         </div>
+
+         <div class="chat-section">
+             <div class="chat-header">
+                 <h3>
+                     <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                     </svg>
+                     In-game Chat
+                 </h3>
+                 <div class="chat-controls">
+                     <div class="chat-search-container">
+                         <input type="search" id="chat-search" placeholder="">
+                         <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                         </svg>
+                     </div>
+                     <div class="chat-filter-buttons">
+                         <button id="chat-sort-username-button">All Users</button>
+                         <div class="date-picker-wrapper">
+                             <span id="chat-date-display" class="date-text">Date</span>
+                             <div class="vertical-border"></div>
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" 
+                                  stroke-linecap="round" stroke-linejoin="round" class="calendar-icon">
+                                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                 <line x1="16" y1="2" x2="16" y2="6"/>
+                                 <line x1="8" y1="2" x2="8" y2="6"/>
+                                 <line x1="3" y1="10" x2="21" y2="10"/>
+                             </svg>
+                             <input type="date" id="chat-sort-date">
+                         </div>
+                     </div>
+                 </div>
+             </div>
+             <div class="chat-messages" id="chat-messages">
+                 <p class="info-label" style="text-align: center; margin-top: 1rem;">Loading chat...</p>
+             </div>
+         </div>
+
+         <div class="admin-panel-card">
+             <h3>
+                 <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.312 2.572-1.065z"></path>
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                 </svg>
+                 Admin Panel
+             </h3>
+             <div class="admin-button-group">
+                 <button class="command-button" id="join-button">
+                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                         <line x1="12" y1="5" x2="12" y2="19"></line>
+                         <line x1="5" y1="12" x2="19" y2="12"></line>
+                     </svg>
+                     Join
+                 </button>
+                 <button class="command-button" id="leave-button">
+                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                         <path d="M16 17l5-5-5-5"></path>
+                         <path d="M21 12H9"></path>
+                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                     </svg>
+                     Leave
+                 </button>
+                 <button class="command-button" id="rejoin-button">
+                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                         <polyline points="17 11 12 6 7 11"></polyline>
+                         <line x1="12" y1="18" x2="12" y2="6"></line>
+                         <polyline points="7 13 12 18 17 13"></polyline>
+                     </svg>
+                     Rejoin
+                 </button>
+             </div>
+         </div>
+     </div>
+ </main>
+
+ <footer>
+     <div class="container">
+         <p>
+             <img src="./logo.png" alt="Leaf Logo" class="logo-footer" onerror="this.onerror=null;this.src='https://placehold.co/20x20/059669/ffffff?text=L';" /> 
+             <span class="brand-footer">LeafSMP</span>
+         </p>
+         <p>©2025 LeafSMP</p>
+     </div>
+ </footer>
+
+ <script>
+     const socket = io();
+     const cooldowns = {
+         join: false,
+         leave: false,
+         rejoin: false
+     };
+
+     function formatUptime(seconds) {
+         const hours = Math.floor(seconds / 3600);
+         const minutes = Math.floor((seconds % 3600) / 60);
+         const remainingSeconds = seconds % 60;
+         
+         if (hours > 0) {
+             return `${hours}h ${minutes}m`;
+         } else if (minutes > 0) {
+             return `${minutes}m ${remainingSeconds}s`;
+         } else {
+             return `${remainingSeconds}s`;
+         }
+     }
+
+     function getMinecraftTimeDetails(ticks) {
+         let timeOfDay = 'Midday'; // Always "Midday" as per request
+         let exactTime = '';
+
+         // Minecraft day is 24000 ticks long. 1000 ticks = 1 hour.
+         // Day starts at 0 ticks (6:00 AM)
+         const hours = Math.floor((ticks / 1000 + 6) % 24);
+         const minutes = Math.floor(((ticks % 1000) / 1000) * 60);
+         const ampm = hours >= 12 ? 'PM' : 'AM';
+         const displayHours = hours % 12 === 0 ? 12 : hours % 12;
+         exactTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+
+         // No specific iconSvg needed as per the request to remove time-of-day SVGs
+         return { timeOfDay, exactTime };
+     }
+
+     function updateStatus(data) {
+         const statusIndicator = document.getElementById('status-indicator');
+         const statusText = document.getElementById('status-text');
+         const statusBadge = document.getElementById('status-badge');
+         
+         if (data.message.includes('running')) {
+             statusIndicator.style.backgroundColor = '#10b981';
+             statusText.textContent = 'Online';
+             statusBadge.className = 'badge badge-success';
+             statusBadge.innerHTML = `
+                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                 </svg>
+                 Online
+             `;
+         } else {
+             statusIndicator.style.backgroundColor = '#ef4444';
+             statusText.textContent = 'Offline';
+             statusBadge.className = 'badge badge-error';
+             statusBadge.innerHTML = `
+                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                 </svg>
+                 Offline
+             `;
+         }
+
+         document.getElementById('player-count').textContent = data.onlinePlayersCount || 0;
+         document.getElementById('uptime').textContent = formatUptime(data.uptime || 0);
+         document.getElementById('movements').textContent = (data.movements || 0).toLocaleString();
+         document.getElementById('memory').textContent = data.memoryUsage || '0 MB';
+
+         document.getElementById('bot-name').textContent = data.botName || 'N/A';
+         document.getElementById('game-mode').textContent = data.gameMode || 'Unknown';
+         document.getElementById('position').textContent = data.position 
+             ? `${data.position.x}, ${data.position.y}, ${data.position.z}`
+             : 'Unknown';
+         document.getElementById('bot-health').textContent = data.botHealth || 'N/A';
+         document.getElementById('bot-food').textContent = data.botFood || 'N/A';
+         document.getElementById('bot-latency').textContent = data.botLatency || 'N/A';
+
+         document.getElementById('server-ip').textContent = data.serverHost || 'N/A';
+         document.getElementById('server-port').textContent = data.serverPort || 'N/A';
+         document.getElementById('server-load').textContent = data.serverLoad || 'N/A';
+         document.getElementById('cpu-usage').textContent = `${data.cpuUsage || '0.00'}%`;
+         document.getElementById('disk-free').textContent = data.diskFree || '0.00 GB';
+         document.getElementById('disk-total').textContent = data.diskTotal || '0.00 GB';
+         
+         document.getElementById('minecraft-day').textContent = data.minecraftDay !== 'N/A' ? `Day ${data.minecraftDay}` : 'N/A';
+         
+         const minecraftTimeElement = document.getElementById('minecraft-time');
+         if (data.minecraftTime !== 'N/A') {
+             const { timeOfDay, exactTime } = getMinecraftTimeDetails(data.minecraftTime);
+             minecraftTimeElement.innerHTML = `
+                 <div class="minecraft-time-display">
+                     <div class="time-icon-text">
+                         ${timeOfDay}
+                     </div>
+                     <div>Live time: ${exactTime}</div>
+                 </div>
+             `;
+         } else {
+             minecraftTimeElement.innerHTML = 'N/A';
+         }
+         
+         document.getElementById('server-difficulty').textContent = data.serverDifficulty !== 'N/A' ? data.serverDifficulty : 'N/A';
+
+         document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+         document.getElementById('last-online').textContent = data.lastOnline ? new Date(data.lastOnline).toLocaleString() : 'Never';
+
+         const playerListContainer = document.getElementById('player-list-container');
+         playerListContainer.innerHTML = '';
+         const playerUsernames = new Set();
+         if (data.playerDetails && data.playerDetails.length > 0) {
+             data.playerDetails.forEach(player => {
+                 playerUsernames.add(player.username);
+                 const playerDiv = document.createElement('div');
+                 playerDiv.className = 'player-list-item';
+                 playerDiv.innerHTML = `
+                     <div class="player-skin-face">
+                         <img src="${player.skinUrl}" alt="${player.username} skin" onerror="this.onerror=null;this.src='./' + (Math.random() > 0.5 ? 'steve.png' : 'alex.png');">
+                     </div>
+                     <span>${player.username} (Ping: ${player.ping})</span>
+                 `;
+                 playerListContainer.appendChild(playerDiv);
+             });
+         } else {
+             playerListContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No players online</p>';
+         }
+
+         // Update username filter options
+         const chatSortUsernameButton = document.getElementById('chat-sort-username-button');
+         // For now, we'll just update the text of the button.
+         // A dropdown would require more complex UI, which is outside the scope of this update.
+         // If a filter is active, the button text could reflect that.
+         // For simplicity, it remains "All Users" or "Selected User" if a specific user is filtered.
+     }
+
+     function handleError() {
+         const statusIndicator = document.getElementById('status-indicator');
+         const statusText = document.getElementById('status-text');
+         const statusBadge = document.getElementById('status-badge');
+         
+         statusIndicator.style.backgroundColor = '#ef4444';
+         statusText.textContent = 'Offline';
+         
+         statusBadge.className = 'badge badge-error';
+         statusBadge.innerHTML = `
+             <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20">
+                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+             </svg>
+             Offline
+         `;
+         document.getElementById('player-count').textContent = '0';
+         document.getElementById('uptime').textContent = '0s';
+         document.getElementById('movements').textContent = '0';
+         document.getElementById('memory').textContent = '0 MB';
+         document.getElementById('bot-name').textContent = 'N/A';
+         document.getElementById('game-mode').textContent = 'Offline';
+         document.getElementById('position').textContent = 'N/A';
+         document.getElementById('bot-health').textContent = 'N/A';
+         document.getElementById('bot-food').textContent = 'N/A';
+         document.getElementById('bot-latency').textContent = 'N/A';
+         document.getElementById('server-ip').textContent = 'N/A';
+         document.getElementById('server-port').textContent = 'N/A';
+         document.getElementById('server-load').textContent = 'N/A';
+         document.getElementById('cpu-usage').textContent = '0.00%';
+         document.getElementById('disk-free').textContent = '0.00 GB';
+         document.getElementById('disk-total').textContent = '0.00 GB';
+         document.getElementById('minecraft-day').textContent = 'N/A';
+         document.getElementById('minecraft-time').innerHTML = 'N/A';
+         document.getElementById('server-difficulty').textContent = 'N/A';
+         document.getElementById('player-list-container').innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Bot is offline</p>';
+         document.getElementById('chat-messages').innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Bot is offline, no chat history available.</p>';
+     }
+
+     async function sendCommand(command) {
+         if (cooldowns[command]) {
+             return;
+         }
+
+         cooldowns[command] = true;
+         const button = document.getElementById(`${command}-button`);
+         button.disabled = true;
+
+         try {
+             const response = await fetch('/api/command', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/json'
+                 },
+                 body: JSON.stringify({ command })
+             });
+             const result = await response.json();
+             if (!result.success) {
+                 console.error(`Command ${command} failed:`, result.message);
+             }
+         } catch (error) {
+             console.error(`Error sending command ${command}:`, error);
+         } finally {
+             setTimeout(() => {
+                 cooldowns[command] = false;
+                 button.disabled = false;
+             }, 5000); // 5 second cooldown
+         }
+     }
+
+     function addChatMessage(message) {
+         const chatMessagesContainer = document.getElementById('chat-messages');
+         const messageDiv = document.createElement('div');
+         messageDiv.className = 'chat-message-item';
+         const timestamp = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+         
+         // Fallback for skinUrl if not available or error
+         const skinUrl = `https://crafatar.com/avatars/${message.uuid || '00000000-0000-0000-0000-000000000000'}?size=32&overlay`; // Using a dummy UUID for fallback
+         
+         messageDiv.innerHTML = `
+             <div class="chat-avatar">
+                 <img src="${skinUrl}" alt="${message.username} skin" onerror="this.onerror=null;this.src='./' + (Math.random() > 0.5 ? 'steve.png' : 'alex.png');">
+             </div>
+             <div class="chat-content">
+                 <div class="chat-username">${message.username}</div>
+                 <div class="chat-text">${message.chat}</div>
+                 <div class="chat-timestamp">${timestamp}</div>
+             </div>
+         `;
+         chatMessagesContainer.prepend(messageDiv); // Add to top for most recent
+         // Keep scroll at bottom if already near bottom, otherwise let it be
+         if (chatMessagesContainer.scrollHeight - chatMessagesContainer.clientHeight <= chatMessagesContainer.scrollTop + 50) {
+              chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+         }
+     }
+
+     async function fetchChatHistory() {
+         const usernameFilter = document.getElementById('chat-sort-username-button').dataset.usernameFilter || '';
+         const dateFilter = document.getElementById('chat-sort-date').value;
+         const searchFilter = document.getElementById('chat-search').value;
+
+         let url = `/api/chat?`;
+         if (usernameFilter) url += `username=${usernameFilter}&`;
+         if (dateFilter) url += `date=${dateFilter}&`;
+         if (searchFilter) url += `search=${searchFilter}&`;
+         url = url.slice(0, -1); // Remove trailing '&' or '?'
+
+         try {
+             const response = await fetch(url);
+             const messages = await response.json();
+             const chatMessagesContainer = document.getElementById('chat-messages');
+             chatMessagesContainer.innerHTML = ''; // Clear existing messages
+             if (messages.length === 0) {
+                 chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No messages found.</p>';
+             } else {
+                 messages.forEach(msg => addChatMessage(msg));
+             }
+         } catch (error) {
+             console.error('Error fetching chat history:', error);
+             document.getElementById('chat-messages').innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Failed to load chat history.</p>';
+         }
+     }
+
+     document.addEventListener('DOMContentLoaded', () => {
+         document.getElementById('current-year').textContent = new Date().getFullYear();
+
+         document.getElementById('join-button').addEventListener('click', () => sendCommand('join'));
+         document.getElementById('leave-button').addEventListener('click', () => sendCommand('leave'));
+         document.getElementById('rejoin-button').addEventListener('click', () => sendCommand('rejoin'));
+
+         document.getElementById('chat-search').addEventListener('input', fetchChatHistory);
+         
+         // Handle "All Users" button click
+         document.getElementById('chat-sort-username-button').addEventListener('click', () => {
+             const currentFilter = document.getElementById('chat-sort-username-button').dataset.usernameFilter;
+             if (currentFilter) {
+                 document.getElementById('chat-sort-username-button').dataset.usernameFilter = '';
+                 document.getElementById('chat-sort-username-button').textContent = 'All Users';
+             } else {
+                 // In a real scenario, this would open a modal/dropdown to select a user
+                 // For now, it just toggles the filter off.
+                 // To implement user selection, you'd need to populate a list of users.
+             }
+             fetchChatHistory();
+         });
+
+         // Handle date input change
+         document.getElementById('chat-sort-date').addEventListener('change', (event) => {
+             const selectedDate = event.target.value;
+             const dateDisplay = document.getElementById('chat-date-display');
+             if (selectedDate) {
+                 dateDisplay.textContent = selectedDate; // Only date text
+             } else {
+                 dateDisplay.textContent = 'Date'; // Reset to "Date"
+             }
+             fetchChatHistory();
+         });
+
+         // Initial fetch for chat history
+         fetchChatHistory();
+     });
+
+     // Socket.IO event listener for bot status updates
+     socket.on('botStatusUpdate', (data) => {
+         updateStatus(data);
+     });
+
+     // Socket.IO event listener for new chat messages
+     socket.on('chatMessage', (message) => {
+         // Only add if no filters are active or if message matches current filters
+         const usernameFilter = document.getElementById('chat-sort-username-button').dataset.usernameFilter || '';
+         const dateFilter = document.getElementById('chat-sort-date').value;
+         const searchFilter = document.getElementById('chat-search').value;
+
+         const messageDate = new Date(message.timestamp).toISOString().split('T')[0];
+
+         const matchesUsername = !usernameFilter || message.username === usernameFilter;
+         const matchesDate = !dateFilter || messageDate === dateFilter;
+         const matchesSearch = !searchFilter || message.chat.toLowerCase().includes(searchFilter.toLowerCase());
+
+         if (matchesUsername && matchesDate && matchesSearch) {
+             addChatMessage(message);
+         }
+     });
+
+     // Handle initial load status (if socket.io hasn't connected yet)
+     // This will be overridden by the first socket.on('botStatusUpdate')
+     handleError();
+ </script>
+</body>
+</html>
