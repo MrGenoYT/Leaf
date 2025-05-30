@@ -504,7 +504,7 @@ footer .brand-footer {
    background-color: var(--primary-bg);
    display: flex;
    flex-direction: column;
-   scroll-behavior: smooth;
+   scroll-behavior: auto;
 }
 
 .chat-message-item {
@@ -1167,9 +1167,9 @@ function addChatMessage(message) {
      <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
  `;
  chatMessagesContainer.prepend(messageDiv);
-
  chatMessagesContainer.scrollTop = 0;
 }
+   
 
 async function fetchChatHistory() {
   const usernameFilter = document.getElementById('chat-sort-username-button').dataset.usernameFilter || '';
