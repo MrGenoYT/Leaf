@@ -63,24 +63,17 @@ let isMovementPaused = false;
 let movementPauseTimeout = null;
 let rejoinActivityTimeout = null;
 
-console.log('Express app initialization started ✅');
 const app = express();
-console.log('HTTP server creation started ✅');
 const server = http.createServer(app);
-console.log('Socket.IO server creation started ✅');
 const io = new Server(server);
 
-console.log('Express middleware setup started ✅');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-console.log('Express middleware setup completed ✅');
 
-console.log('MongoDB connection attempt started ✅');
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected ✅'))
+  .then(() => {})
   .catch(err => console.error('MongoDB connection error ❌:', err));
 
-console.log('Mongoose schemas defined ✅');
 const chatSchema = new mongoose.Schema({
   username: String,
   chat: String,
@@ -93,10 +86,8 @@ const playerFaceSchema = new mongoose.Schema({
   face: String
 });
 const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
-console.log('Mongoose models created ✅');
 
 function clearAllIntervals() {
-  console.log('Clearing all intervals...');
   if (movementInterval) {
     clearInterval(movementInterval);
     movementInterval = null;
@@ -125,7 +116,6 @@ function clearAllIntervals() {
     clearTimeout(rejoinActivityTimeout);
     rejoinActivityTimeout = null;
   }
-  console.log('All intervals cleared ✅');
 }
 
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
@@ -133,11 +123,9 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
     return;
   }
   try {
-    console.log(`Sending Discord embed: ${title}`);
     await axios.post(DISCORD_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
-    console.log('Discord embed sent ✅');
   } catch (err) {
     console.error('Discord Webhook Error ❌:', err.message);
   }
@@ -148,11 +136,9 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
     return;
   }
   try {
-    console.log(`Sending chat embed: ${title}`);
     await axios.post(CHAT_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
-    console.log('Chat embed sent ✅');
   } catch (err) {
     console.error('Chat Webhook Error ❌:', err.message);
   }
@@ -163,11 +149,9 @@ async function sendPlayerMessage(username, message) {
     return;
   }
   try {
-    console.log(`Sending player message to ${username}`);
     await axios.post(MESSAGE_WEBHOOK, {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
-    console.log('Player message sent ✅');
   } catch (err) {
     console.error('Message Webhook Error ❌:', err.message);
   }
@@ -185,7 +169,6 @@ function sendPlayerList() {
     return;
   }
   try {
-    console.log('Sending player list...');
     const playersExcludingBot = getOnlinePlayersExcludingBot();
 
     if (playersExcludingBot.length === 0) {
@@ -199,7 +182,6 @@ function sendPlayerList() {
       inline: true
     }));
     sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
-    console.log('Player list sent ✅');
   } catch (err) {
     console.error('Error sending player list ❌:', err.message);
   }
@@ -210,7 +192,6 @@ function sendBotStats() {
     return;
   }
   try {
-    console.log('Sending bot stats...');
     const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
@@ -236,7 +217,6 @@ function sendBotStats() {
       { name: 'Players Online', value: `${onlinePlayersCount} (excluding bot)`, inline: true },
       { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
     ]);
-    console.log('Bot stats sent ✅');
   } catch (err) {
     console.error('Error sending bot stats ❌:', err.message);
   }
@@ -244,17 +224,14 @@ function sendBotStats() {
 
 function performMovement() {
   if (!bot || !bot.entity || isMovementPaused) {
-    console.log('Movement skipped: bot not ready or movements paused.');
     return;
   }
   try {
-    console.log('Performing movement...');
     const currentPos = bot.entity.position;
     const targetX = currentPos.x + (Math.random() * 10 - 5);
     const targetZ = currentPos.z + (Math.random() * 10 - 5);
     bot.entity.position.set(targetX, currentPos.y, targetZ);
     movementCount++;
-    console.log('Movement performed ✅');
   } catch (err) {
     console.error('Movement error ❌:', err.message);
   }
@@ -265,26 +242,22 @@ function lookAround() {
     return;
   }
   try {
-    console.log('Looking around...');
     const yaw = Math.random() * Math.PI * 2;
     const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
     bot.look(yaw, pitch, true);
-    console.log('Look performed ✅');
   } catch (err) {
     console.error('Look error ❌:', err.message);
   }
 }
 
 function setupIntervals() {
-  console.log('Setting up intervals...');
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
   botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
-  rejoinActivityTimeout = setInterval(checkBotActivity, 5000); // Check every 5 seconds
+  rejoinActivityTimeout = setInterval(checkBotActivity, 5000);
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
-  console.log('Intervals set up ✅');
 }
 
 function checkBotActivity() {
@@ -295,7 +268,6 @@ function checkBotActivity() {
   const uptime = Date.now() - botStartTime;
 
   if (uptime >= ONE_HOUR) {
-    console.log('Bot active for over 1 hour. Rejoining in 15 seconds... ⏳');
     sendDiscordEmbed('Bot Activity', 'Bot active for over 1 hour. Rejoining to prevent AFK detection.', WARNING_EMBED_COLOR);
     forceRejoinBot();
     botStartTime = null;
@@ -303,7 +275,6 @@ function checkBotActivity() {
   }
 
   if (uptime >= THIRTY_MINUTES && !isMovementPaused) {
-    console.log('Bot active for over 30 minutes. Pausing movements for 1 minute... ⏸️');
     sendDiscordEmbed('Bot Activity', 'Bot active for over 30 minutes. Pausing movements for 1 minute to prevent AFK detection.', INFO_EMBED_COLOR);
     isMovementPaused = true;
     if (movementInterval) {
@@ -311,7 +282,6 @@ function checkBotActivity() {
       movementInterval = null;
     }
     movementPauseTimeout = setTimeout(() => {
-      console.log('Resuming movements... ▶️');
       sendDiscordEmbed('Bot Activity', 'Resuming movements after 1 minute pause.', INFO_EMBED_COLOR);
       isMovementPaused = false;
       movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
@@ -320,7 +290,6 @@ function checkBotActivity() {
 }
 
 function startBot() {
-  console.log('Bot initialization started ✅');
   clearAllIntervals();
   if (bot) {
     bot.removeAllListeners();
@@ -333,10 +302,8 @@ function startBot() {
   isMovementPaused = false;
 
   bot = mineflayer.createBot(botOptions);
-  console.log('Mineflayer bot created ✅');
 
   bot.once('spawn', () => {
-    console.log('Bot joined the server ✅');
     sendDiscordEmbed('Bot Connected', `${botOptions.username} has joined the server.`, SUCCESS_EMBED_COLOR);
     isBotOnline = true;
     lastOnlineTime = Date.now();
@@ -344,7 +311,6 @@ function startBot() {
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
-        console.log('Bot client socket closed.');
       });
     }
     setTimeout(() => {
@@ -353,7 +319,6 @@ function startBot() {
   });
 
   bot.on('game', () => {
-    console.log(`Game mode changed to: ${bot.gameMode}`);
     if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
     } else {
@@ -362,7 +327,6 @@ function startBot() {
   });
 
   bot.on('end', (reason) => {
-    console.log(`Bot disconnected ❌. Reason: ${reason}`);
     sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
@@ -370,7 +334,6 @@ function startBot() {
   });
 
   bot.on('kicked', (reason) => {
-    console.log(`Bot kicked ❌. Reason: ${reason}`);
     sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
@@ -378,7 +341,6 @@ function startBot() {
   });
 
   bot.on('error', (err) => {
-    console.error('Bot error ❌:', err.message);
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
 
     if (err.message.includes("timed out") ||
@@ -391,14 +353,26 @@ function startBot() {
   });
 
   bot.on('chat', async (username, message) => {
-    console.log(`Chat received from ${username}: ${message}`);
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        const chatMessage = new MinecraftChat({ username, chat: message });
+        let playerFace = await PlayerFace.findOne({ username: username });
+        if (!playerFace) {
+          const assignedFaces = await PlayerFace.find({}, 'face');
+          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
+
+          let selectedFace;
+          if (availableFaces.length > 0) {
+            selectedFace = availableFaces[0];
+          } else {
+            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+          }
+          playerFace = new PlayerFace({ username: username, face: selectedFace });
+          await playerFace.save();
+        }
+        const chatMessage = new MinecraftChat({ username, chat: message, face: playerFace.face });
         await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp });
-        console.log('Chat message saved to MongoDB and emitted via Socket.IO ✅');
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, face: playerFace.face });
       } catch (err) {
         console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
@@ -406,7 +380,6 @@ function startBot() {
   });
 
   bot.on('playerJoined', async (player) => {
-    console.log(`Player joined: ${player.username}`);
     if (player.username !== botOptions.username) {
       if (player.username.startsWith('.')) {
         let playerFace = await PlayerFace.findOne({ username: player.username });
@@ -422,7 +395,6 @@ function startBot() {
           }
           playerFace = new PlayerFace({ username: player.username, face: selectedFace });
           await playerFace.save();
-          console.log(`Assigned new face to ${player.username} ✅`);
         }
         player.skinType = playerFace.face.replace('.png', '');
       }
@@ -434,7 +406,6 @@ function startBot() {
   });
 
   bot.on('playerLeft', (player) => {
-    console.log(`Player left: ${player.username}`);
     if (player.username !== botOptions.username) {
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
@@ -445,7 +416,6 @@ function startBot() {
 }
 
 function reconnectBot() {
-  console.log('Attempting to reconnect bot... 🔄');
   clearAllIntervals();
   reconnectTimeout = setTimeout(() => {
     startBot();
@@ -453,7 +423,6 @@ function reconnectBot() {
 }
 
 function forceRejoinBot() {
-  console.log('Force rejoining bot... 🔄');
   clearAllIntervals();
   rejoinActivityTimeout = setTimeout(() => {
     startBot();
@@ -482,7 +451,6 @@ function getCpuUsage() {
 
 app.get('/api/status', async (req, res) => {
   try {
-    console.log('API status request received ✅');
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
@@ -505,9 +473,7 @@ app.get('/api/status', async (req, res) => {
 
     let diskInfo = { free: 0, total: 0 };
     try {
-      console.log('Checking disk usage...');
       diskInfo = await diskusage.check('/');
-      console.log('Disk usage checked ✅');
     } catch (err) {
       console.error('Disk usage error ❌:', err.message);
     }
@@ -542,7 +508,6 @@ app.get('/api/status', async (req, res) => {
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
     res.json(botStatus);
-    console.log('API status response sent ✅');
   } catch (err) {
     console.error('Error in /api/status ❌:', err.message);
     res.status(500).json({ error: "Internal Server Error" });
@@ -551,7 +516,6 @@ app.get('/api/status', async (req, res) => {
 
 app.get('/api/chat', async (req, res) => {
   try {
-    console.log('API chat history request received ✅');
     const { username, date, search } = req.query;
     let query = {};
     if (username) {
@@ -574,7 +538,6 @@ app.get('/api/chat', async (req, res) => {
       .skip(skip)
       .limit(limit);
     res.json(messages);
-    console.log('Chat history fetched and sent ✅');
   } catch (err) {
     console.error('Error fetching chat history ❌:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -583,10 +546,8 @@ app.get('/api/chat', async (req, res) => {
 
 app.get('/api/chat/usernames', async (req, res) => {
   try {
-    console.log('API chat usernames request received ✅');
     const usernames = await MinecraftChat.distinct('username');
     res.json(usernames);
-    console.log('Distinct usernames fetched and sent ✅');
   } catch (err) {
     console.error('Error fetching distinct usernames ❌:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -594,9 +555,7 @@ app.get('/api/chat/usernames', async (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  console.log('A user connected via Socket.IO ✅');
   socket.on('disconnect', () => {
-    console.log('A user disconnected from Socket.IO ❌');
   });
 });
 
@@ -663,13 +622,11 @@ setInterval(async () => {
 }, SOCKET_IO_UPDATE_INTERVAL);
 
 app.get('/', (req, res) => {
-  console.log('Serving dashboard.html ✅');
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 server.listen(WEB_SERVER_PORT, () => {
-  console.log(`Web server started on port ${WEB_SERVER_PORT} ✅`);
   sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
-startBot(); 
+startBot();
