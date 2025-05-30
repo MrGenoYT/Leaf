@@ -195,8 +195,7 @@ function sendBotStats() {
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
     const ping = bot.player ? bot.player.ping : 'Unknown';
 
-    const gameModeDisplay = (bot?.gameMode === 3 || (bot?.gameMode === undefined && isBotOnline)) ?
-      'Spectator' : 'Unknown';
+    const gameModeDisplay = bot?.gameMode === 3 ? 'Spectator' : 'Unknown';
 
     const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
 
@@ -399,8 +398,7 @@ app.get('/api/status', async (req, res) => {
       };
     });
 
-    const gameModeApiDisplay = (bot?.gameMode === 3 ||
-      (bot?.gameMode === undefined && isBotOnline)) ? "Spectator" : "Unknown";
+    const gameModeApiDisplay = bot?.gameMode === 3 ? "Spectator" : "Unknown";
 
     let diskInfo = { free: 0, total: 0 };
     try {
@@ -427,7 +425,7 @@ app.get('/api/status', async (req, res) => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${(bot.health / 20 * 10).toFixed(1)}/10` : 'N/A',
+      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A', // Changed to 20/20
       botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
       botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
@@ -435,7 +433,7 @@ app.get('/api/status', async (req, res) => {
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
       minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
+      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A', // Pass raw ticks
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
     res.json(botStatus);
@@ -571,7 +569,7 @@ setInterval(async () => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${(bot.health / 20 * 10).toFixed(1)}/10` : 'N/A',
+      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A', // Changed to 20/20
       botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
       botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
@@ -579,7 +577,7 @@ setInterval(async () => {
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
       minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
+      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A', // Pass raw ticks
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
     io.emit('botStatusUpdate', botStatus);
