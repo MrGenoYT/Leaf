@@ -11,7 +11,7 @@ const diskusage = require('diskusage');
 
 const BOT_HOST = process.env.BOT_HOST || 'Leafsong.aternos.me';
 const BOT_PORT = parseInt(process.env.BOT_PORT, 10) || 36915;
-const BOT_USERNAME = process.env.BOT_USERNAME || 'LeafBOT';
+const BOT_USERNAME = process.env.BOT_USERNAME || 'Leaf';
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const CHAT_WEBHOOK = process.env.CHAT_WEBHOOK;
 const MESSAGE_WEBHOOK = process.env.MESSAGE_WEBHOOK;
