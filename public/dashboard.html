@@ -1093,7 +1093,7 @@ if (data.playerDetails && data.playerDetails.length > 0) {
            </div>
            <span>${player.username} (Ping: ${player.ping})</span>
        `;
-       playerListContainer.appendChild(playerDiv);
+       playerListContainer.prependChild(playerDiv);
    });
 } else {
    playerListContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No players online</p>';
