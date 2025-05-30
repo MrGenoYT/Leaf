@@ -24,7 +24,6 @@ const RECONNECT_DELAY = 10000;
 const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
 const BOT_STATS_INTERVAL = 60 * 60 * 1000;
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
-const SKIN_CHECK_INTERVAL = 10 * 60 * 1000;
 
 const ONE_HOUR = 3600 * 1000;
 const THIRTY_MINUTES = 1800 * 1000;
@@ -38,7 +37,6 @@ const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
 
 const FACES = ['steve.png', 'alex.png', 'lucy.png', 'ken.png', 'burrito.png', 'kaji.png', 'rusty.png', 'doon.png'];
-let faceIndex = 0;
 
 const botOptions = {
   host: BOT_HOST,
@@ -65,32 +63,96 @@ let isMovementPaused = false;
 let movementPauseTimeout = null;
 let rejoinActivityTimeout = null;
 
+console.log('Express app initialization started ✅');
 const app = express();
+console.log('HTTP server creation started ✅');
 const server = http.createServer(app);
+console.log('Socket.IO server creation started ✅');
 const io = new Server(server);
 
+console.log('Express middleware setup started ✅');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+console.log('Express middleware setup completed ✅');
 
+console.log('MongoDB connection attempt started ✅');
 mongoose.connect(MONGO_URI)
-  .then(() => {})
+  .then(() => console.log('MongoDB connected ✅'))
   .catch(err => console.error('MongoDB connection error ❌:', err));
 
+console.log('Mongoose schemas defined ✅');
 const chatSchema = new mongoose.Schema({
   username: String,
   chat: String,
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
+  profilePicture: String
 });
 const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
 
 const playerFaceSchema = new mongoose.Schema({
   username: { type: String, unique: true },
-  skinUrl: String,
-  lastChecked: { type: Date, default: Date.now }
+  face: String,
+  lastUpdated: { type: Date, default: Date.now }
 });
 const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
+console.log('Mongoose models created ✅');
+
+let dotPlayerFaceIndex = 0;
+
+async function getPlayerProfilePicture(username, uuid) {
+  if (username.startsWith('.')) {
+    let playerFace = await PlayerFace.findOne({ username: username });
+    if (!playerFace) {
+      const assignedFacesCount = await PlayerFace.countDocuments({ username: { $regex: /^\./ } });
+      let selectedFace;
+      if (assignedFacesCount < FACES.length) {
+        selectedFace = FACES[dotPlayerFaceIndex % FACES.length];
+        dotPlayerFaceIndex++;
+      } else {
+        selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+      }
+      playerFace = new PlayerFace({ username: username, face: selectedFace });
+      await playerFace.save();
+    }
+    return `./${playerFace.face}`;
+  } else {
+    const crafatarUrl = `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
+    try {
+      const response = await axios.head(crafatarUrl, { timeout: 3000 });
+      if (response.status === 200) {
+        let playerFace = await PlayerFace.findOne({ username: username });
+        if (!playerFace) {
+          playerFace = new PlayerFace({ username: username, face: crafatarUrl });
+        } else {
+          playerFace.face = crafatarUrl;
+          playerFace.lastUpdated = Date.now();
+        }
+        await playerFace.save();
+        return crafatarUrl;
+      }
+    } catch (error) {
+      console.warn(`Crafatar lookup failed for ${username}, using fallback.`, error.message);
+    }
+
+    let playerFace = await PlayerFace.findOne({ username: username });
+    if (playerFace && !playerFace.face.startsWith('http')) {
+      return `./${playerFace.face}`;
+    } else {
+      const fallbackFace = FACES[Math.floor(Math.random() * FACES.length)];
+      if (!playerFace) {
+        playerFace = new PlayerFace({ username: username, face: fallbackFace });
+      } else {
+        playerFace.face = fallbackFace;
+        playerFace.lastUpdated = Date.now();
+      }
+      await playerFace.save();
+      return `./${fallbackFace}`;
+    }
+  }
+}
 
 function clearAllIntervals() {
+  console.log('Clearing all intervals...');
   if (movementInterval) {
     clearInterval(movementInterval);
     movementInterval = null;
@@ -119,6 +181,7 @@ function clearAllIntervals() {
     clearTimeout(rejoinActivityTimeout);
     rejoinActivityTimeout = null;
   }
+  console.log('All intervals cleared ✅');
 }
 
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
@@ -126,9 +189,11 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
     return;
   }
   try {
+    console.log(`Sending Discord embed: ${title}`);
     await axios.post(DISCORD_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
+    console.log('Discord embed sent ✅');
   } catch (err) {
     console.error('Discord Webhook Error ❌:', err.message);
   }
@@ -139,9 +204,11 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
     return;
   }
   try {
+    console.log(`Sending chat embed: ${title}`);
     await axios.post(CHAT_WEBHOOK, {
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
+    console.log('Chat embed sent ✅');
   } catch (err) {
     console.error('Chat Webhook Error ❌:', err.message);
   }
@@ -152,9 +219,11 @@ async function sendPlayerMessage(username, message) {
     return;
   }
   try {
+    console.log(`Sending player message to ${username}`);
     await axios.post(MESSAGE_WEBHOOK, {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
+    console.log('Player message sent ✅');
   } catch (err) {
     console.error('Message Webhook Error ❌:', err.message);
   }
@@ -172,6 +241,7 @@ function sendPlayerList() {
     return;
   }
   try {
+    console.log('Sending player list...');
     const playersExcludingBot = getOnlinePlayersExcludingBot();
 
     if (playersExcludingBot.length === 0) {
@@ -185,6 +255,7 @@ function sendPlayerList() {
       inline: true
     }));
     sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
+    console.log('Player list sent ✅');
   } catch (err) {
     console.error('Error sending player list ❌:', err.message);
   }
@@ -195,6 +266,7 @@ function sendBotStats() {
     return;
   }
   try {
+    console.log('Sending bot stats...');
     const uptime = botStartTime ? Math.floor((Date.now() - botStartTime) / 1000) : 0;
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
@@ -220,6 +292,7 @@ function sendBotStats() {
       { name: 'Players Online', value: `${onlinePlayersCount} (excluding bot)`, inline: true },
       { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
     ]);
+    console.log('Bot stats sent ✅');
   } catch (err) {
     console.error('Error sending bot stats ❌:', err.message);
   }
@@ -227,14 +300,17 @@ function sendBotStats() {
 
 function performMovement() {
   if (!bot || !bot.entity || isMovementPaused) {
+    console.log('Movement skipped: bot not ready or movements paused.');
     return;
   }
   try {
+    console.log('Performing movement...');
     const currentPos = bot.entity.position;
     const targetX = currentPos.x + (Math.random() * 10 - 5);
     const targetZ = currentPos.z + (Math.random() * 10 - 5);
     bot.entity.position.set(targetX, currentPos.y, targetZ);
     movementCount++;
+    console.log('Movement performed ✅');
   } catch (err) {
     console.error('Movement error ❌:', err.message);
   }
@@ -245,15 +321,18 @@ function lookAround() {
     return;
   }
   try {
+    console.log('Looking around...');
     const yaw = Math.random() * Math.PI * 2;
     const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
     bot.look(yaw, pitch, true);
+    console.log('Look performed ✅');
   } catch (err) {
     console.error('Look error ❌:', err.message);
   }
 }
 
 function setupIntervals() {
+  console.log('Setting up intervals...');
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
@@ -261,6 +340,7 @@ function setupIntervals() {
   rejoinActivityTimeout = setInterval(checkBotActivity, 5000);
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
+  console.log('Intervals set up ✅');
 }
 
 function checkBotActivity() {
@@ -271,6 +351,7 @@ function checkBotActivity() {
   const uptime = Date.now() - botStartTime;
 
   if (uptime >= ONE_HOUR) {
+    console.log('Bot active for over 1 hour. Rejoining in 15 seconds... ⏳');
     sendDiscordEmbed('Bot Activity', 'Bot active for over 1 hour. Rejoining to prevent AFK detection.', WARNING_EMBED_COLOR);
     forceRejoinBot();
     botStartTime = null;
@@ -278,6 +359,7 @@ function checkBotActivity() {
   }
 
   if (uptime >= THIRTY_MINUTES && !isMovementPaused) {
+    console.log('Bot active for over 30 minutes. Pausing movements for 1 minute... ⏸️');
     sendDiscordEmbed('Bot Activity', 'Bot active for over 30 minutes. Pausing movements for 1 minute to prevent AFK detection.', INFO_EMBED_COLOR);
     isMovementPaused = true;
     if (movementInterval) {
@@ -285,6 +367,7 @@ function checkBotActivity() {
       movementInterval = null;
     }
     movementPauseTimeout = setTimeout(() => {
+      console.log('Resuming movements... ▶️');
       sendDiscordEmbed('Bot Activity', 'Resuming movements after 1 minute pause.', INFO_EMBED_COLOR);
       isMovementPaused = false;
       movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
@@ -292,87 +375,8 @@ function checkBotActivity() {
   }
 }
 
-async function getPlayerSkinUrl(username, uuid) {
-  let playerFace = await PlayerFace.findOne({ username });
-  let skinUrl;
-
-  if (username.startsWith('.')) {
-    if (!playerFace) {
-      const assignedFacesCount = await PlayerFace.countDocuments({ skinUrl: { $in: FACES.map(f => `./${f}`) } });
-      let selectedFace;
-      if (assignedFacesCount < FACES.length) {
-        const assignedFaces = await PlayerFace.find({}, 'skinUrl');
-        const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.skinUrl === `./${face}`));
-        selectedFace = availableFaces[0];
-      } else {
-        selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-      }
-      skinUrl = `./${selectedFace}`;
-      playerFace = new PlayerFace({ username, skinUrl });
-      await playerFace.save();
-    } else {
-      skinUrl = playerFace.skinUrl;
-    }
-  } else {
-    const crafatarUrl = `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
-    try {
-      const response = await axios.head(crafatarUrl, { timeout: 3000 });
-      if (response.status === 200) {
-        skinUrl = crafatarUrl;
-      } else {
-        skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-      }
-    } catch (error) {
-      skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-    }
-
-    if (playerFace) {
-      if (playerFace.skinUrl !== skinUrl) {
-        playerFace.skinUrl = skinUrl;
-        playerFace.lastChecked = Date.now();
-        await playerFace.save();
-      } else {
-        playerFace.lastChecked = Date.now();
-        await playerFace.save();
-      }
-    } else {
-      playerFace = new PlayerFace({ username, skinUrl });
-      await playerFace.save();
-    }
-  }
-  return skinUrl;
-}
-
-async function checkAndRefreshSkins() {
-  const players = await PlayerFace.find({ username: { $not: /^\./ } });
-  for (const player of players) {
-    const crafatarUrl = `https://crafatar.com/avatars/${player.uuid}?size=32&overlay`;
-    try {
-      const response = await axios.head(crafatarUrl, { timeout: 3000 });
-      if (response.status === 200) {
-        if (player.skinUrl !== crafatarUrl) {
-          player.skinUrl = crafatarUrl;
-          player.lastChecked = Date.now();
-          await player.save();
-        }
-      } else {
-        if (!FACES.some(f => player.skinUrl === `./${f}`)) {
-          player.skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-          player.lastChecked = Date.now();
-          await player.save();
-        }
-      }
-    } catch (error) {
-      if (!FACES.some(f => player.skinUrl === `./${f}`)) {
-        player.skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-        player.lastChecked = Date.now();
-        await player.save();
-      }
-    }
-  }
-}
-
 function startBot() {
+  console.log('Bot initialization started ✅');
   clearAllIntervals();
   if (bot) {
     bot.removeAllListeners();
@@ -385,8 +389,10 @@ function startBot() {
   isMovementPaused = false;
 
   bot = mineflayer.createBot(botOptions);
+  console.log('Mineflayer bot created ✅');
 
   bot.once('spawn', () => {
+    console.log('Bot joined the server ✅');
     sendDiscordEmbed('Bot Connected', `${botOptions.username} has joined the server.`, SUCCESS_EMBED_COLOR);
     isBotOnline = true;
     lastOnlineTime = Date.now();
@@ -394,6 +400,7 @@ function startBot() {
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
+        console.log('Bot client socket closed.');
       });
     }
     setTimeout(() => {
@@ -402,6 +409,7 @@ function startBot() {
   });
 
   bot.on('game', () => {
+    console.log(`Game mode changed to: ${bot.gameMode}`);
     if (bot.gameMode === 3) {
       sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
     } else {
@@ -410,6 +418,7 @@ function startBot() {
   });
 
   bot.on('end', (reason) => {
+    console.log(`Bot disconnected ❌. Reason: ${reason}`);
     sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
@@ -417,6 +426,7 @@ function startBot() {
   });
 
   bot.on('kicked', (reason) => {
+    console.log(`Bot kicked ❌. Reason: ${reason}`);
     sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
     isBotOnline = false;
     clearAllIntervals();
@@ -424,6 +434,7 @@ function startBot() {
   });
 
   bot.on('error', (err) => {
+    console.error('Bot error ❌:', err.message);
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
 
     if (err.message.includes("timed out") ||
@@ -436,13 +447,15 @@ function startBot() {
   });
 
   bot.on('chat', async (username, message) => {
+    console.log(`Chat received from ${username}: ${message}`);
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        const chatMessage = new MinecraftChat({ username, chat: message });
+        const profilePicture = await getPlayerProfilePicture(username, bot.players[username]?.uuid);
+        const chatMessage = new MinecraftChat({ username, chat: message, profilePicture: profilePicture });
         await chatMessage.save();
-        const skinUrl = await getPlayerSkinUrl(username, bot.players[username]?.uuid);
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, skinUrl });
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, profilePicture: profilePicture });
+        console.log('Chat message saved to MongoDB and emitted via Socket.IO ✅');
       } catch (err) {
         console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
@@ -450,8 +463,9 @@ function startBot() {
   });
 
   bot.on('playerJoined', async (player) => {
+    console.log(`Player joined: ${player.username}`);
     if (player.username !== botOptions.username) {
-      await getPlayerSkinUrl(player.username, player.uuid);
+      await getPlayerProfilePicture(player.username, player.uuid);
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
         { name: 'Current Players', value: `${onlinePlayersCount} (excluding bot)`, inline: true }
@@ -460,6 +474,7 @@ function startBot() {
   });
 
   bot.on('playerLeft', (player) => {
+    console.log(`Player left: ${player.username}`);
     if (player.username !== botOptions.username) {
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
@@ -470,6 +485,7 @@ function startBot() {
 }
 
 function reconnectBot() {
+  console.log('Attempting to reconnect bot... 🔄');
   clearAllIntervals();
   reconnectTimeout = setTimeout(() => {
     startBot();
@@ -477,6 +493,7 @@ function reconnectBot() {
 }
 
 function forceRejoinBot() {
+  console.log('Force rejoining bot... 🔄');
   clearAllIntervals();
   rejoinActivityTimeout = setTimeout(() => {
     startBot();
@@ -505,10 +522,11 @@ function getCpuUsage() {
 
 app.get('/api/status', async (req, res) => {
   try {
+    console.log('API status request received ✅');
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      const skinUrl = await getPlayerSkinUrl(p.username, p.uuid);
+      const skinUrl = await getPlayerProfilePicture(p.username, p.uuid);
       return {
         username: p.username,
         uuid: p.uuid,
@@ -521,7 +539,9 @@ app.get('/api/status', async (req, res) => {
 
     let diskInfo = { free: 0, total: 0 };
     try {
+      console.log('Checking disk usage...');
       diskInfo = await diskusage.check('/');
+      console.log('Disk usage checked ✅');
     } catch (err) {
       console.error('Disk usage error ❌:', err.message);
     }
@@ -555,127 +575,19 @@ app.get('/api/status', async (req, res) => {
       minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
-    res.json(botStatus);
-  } catch (err) {
-    console.error('Error in /api/status ❌:', err.message);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-app.get('/api/chat', async (req, res) => {
-  try {
-    const { username, date, search } = req.query;
-    let query = {};
-    if (username) {
-      query.username = username;
-    }
-    if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setUTCHours(23, 59, 59, 999);
-      query.timestamp = { $gte: startOfDay, $lte: endOfDay };
-    }
-    if (search) {
-      query.chat = { $regex: search, $options: 'i' };
-    }
-    const skip = parseInt(req.query.skip) || 0;
-    const limit = parseInt(req.query.limit) || 100;
-    const messages = await MinecraftChat.find(query)
-      .sort({ timestamp: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const messagesWithSkins = await Promise.all(messages.map(async msg => {
-      const skinUrl = await getPlayerSkinUrl(msg.username, bot?.players[msg.username]?.uuid);
-      return { ...msg.toObject(), skinUrl };
-    }));
-
-    res.json(messagesWithSkins);
-  } catch (err) {
-    console.error('Error fetching chat history ❌:', err.message);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.get('/api/chat/usernames', async (req, res) => {
-  try {
-    const usernames = await MinecraftChat.distinct('username');
-    res.json(usernames);
-  } catch (err) {
-    console.error('Error fetching distinct usernames ❌:', err.message);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-io.on('connection', (socket) => {
-  socket.on('disconnect', () => {
-  });
-});
-
-setInterval(async () => {
-  try {
-    const playersExcludingBot = getOnlinePlayersExcludingBot();
-    const onlinePlayersCount = playersExcludingBot.length;
-    const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      const skinUrl = await getPlayerSkinUrl(p.username, p.uuid);
-      return {
-        username: p.username,
-        uuid: p.uuid,
-        skinUrl: skinUrl,
-        ping: p.ping || 'N/A'
-      };
-    }));
-
-    let diskInfo = { free: 0, total: 0 };
-    try {
-      diskInfo = await diskusage.check('/');
-    } catch (err) {
-      console.error('Disk usage check in socket.io interval error ❌:', err.message);
-    }
-
-    const botStatus = {
-      message: isBotOnline ? "Bot is running!" : "Bot is offline",
-      onlinePlayersCount: onlinePlayersCount,
-      playerDetails,
-      gameMode: "Spectator",
-      position: bot?.entity?.position ?
-        {
-          x: Math.floor(bot.entity.position.x),
-          y: Math.floor(bot.entity.position.y),
-          z: Math.floor(bot.entity.position.z)
-        } : null,
-      uptime: botStartTime && isBotOnline ? Math.floor((Date.now() - botStartTime) / 1000) : 0,
-      movements: movementCount,
-      memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
-      lastOnline: lastOnlineTime,
-      serverHost: currentServerHost,
-      serverPort: currentServerPort,
-      botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
-      botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
-      botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
-      serverLoad: os.loadavg()[0].toFixed(2),
-      cpuUsage: getCpuUsage().toFixed(2),
-      diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
-      diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
-      minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
-      serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
-    };
     io.emit('botStatusUpdate', botStatus);
   } catch (err) {
     console.error('Error emitting status update via Socket.IO ❌:', err.message);
   }
 }, SOCKET_IO_UPDATE_INTERVAL);
 
-setInterval(checkAndRefreshSkins, SKIN_CHECK_INTERVAL);
-
 app.get('/', (req, res) => {
+  console.log('Serving dashboard.html ✅');
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
 server.listen(WEB_SERVER_PORT, () => {
+  console.log(`Web server started on port ${WEB_SERVER_PORT} ✅`);
   sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
