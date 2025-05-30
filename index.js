@@ -9,7 +9,6 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const diskusage = require('diskusage');
 
-// Environment variables for configuration
 const BOT_HOST = process.env.BOT_HOST || 'Leafsong.aternos.me';
 const BOT_PORT = parseInt(process.env.BOT_PORT, 10) || 36915;
 const BOT_USERNAME = process.env.BOT_USERNAME || 'LeafBOT';
@@ -19,22 +18,19 @@ const MESSAGE_WEBHOOK = process.env.MESSAGE_WEBHOOK;
 const WEB_SERVER_PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/minecraft_dashboard';
 
-// Bot intervals and delays
 const MOVEMENT_INTERVAL = 5000;
 const LOOK_INTERVAL = 3000;
 const RECONNECT_DELAY = 10000;
 const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
 const BOT_STATS_INTERVAL = 60 * 60 * 1000;
-const SOCKET_IO_UPDATE_INTERVAL = 1000; // 1 second for real-time updates
+const SOCKET_IO_UPDATE_INTERVAL = 1000;
 
-// Discord embed colors
 const DEFAULT_EMBED_COLOR = 0x3498db;
 const SUCCESS_EMBED_COLOR = 0x00ff00;
 const WARNING_EMBED_COLOR = 0xff9900;
 const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
 
-// Mineflayer bot options
 const botOptions = {
   host: BOT_HOST,
   port: BOT_PORT,
@@ -42,7 +38,6 @@ const botOptions = {
   connectTimeout: null,
 };
 
-// Global bot state variables
 let bot = null;
 let reconnectTimeout = null;
 let movementInterval = null;
@@ -58,21 +53,17 @@ let currentServerPort = BOT_PORT;
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTime = process.hrtime.bigint();
 
-// Express app setup
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Middleware to parse JSON bodies
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// MongoDB connection
 mongoose.connect(MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// MongoDB schema for chat messages
 const chatSchema = new mongoose.Schema({
   username: String,
   chat: String,
@@ -80,7 +71,6 @@ const chatSchema = new mongoose.Schema({
 });
 const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
 
-// Function to clear all bot-related intervals
 function clearAllIntervals() {
   if (movementInterval) {
     clearInterval(movementInterval);
@@ -104,7 +94,6 @@ function clearAllIntervals() {
   }
 }
 
-// Function to send Discord embeds
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
   if (!DISCORD_WEBHOOK) {
     return;
@@ -118,7 +107,6 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
   }
 }
 
-// Function to send chat embeds
 async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fields = []) {
   if (!CHAT_WEBHOOK) {
     return;
@@ -132,7 +120,6 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
   }
 }
 
-// Function to send player messages
 async function sendPlayerMessage(username, message) {
   if (username === botOptions.username || !MESSAGE_WEBHOOK) {
     return;
@@ -146,7 +133,6 @@ async function sendPlayerMessage(username, message) {
   }
 }
 
-// Helper to get online players excluding the bot
 function getOnlinePlayersExcludingBot() {
   if (!bot || !bot.players) {
     return [];
@@ -154,7 +140,6 @@ function getOnlinePlayersExcludingBot() {
   return Object.values(bot.players).filter(p => p.username !== botOptions.username);
 }
 
-// Function to send player list to Discord
 function sendPlayerList() {
   if (!bot || !bot.players) {
     return;
@@ -178,7 +163,6 @@ function sendPlayerList() {
   }
 }
 
-// Function to send bot stats to Discord
 function sendBotStats() {
   if (!bot || !bot.entity) {
     return;
@@ -195,7 +179,7 @@ function sendBotStats() {
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
     const ping = bot.player ? bot.player.ping : 'Unknown';
 
-    const gameModeDisplay = bot?.gameMode === 3 ? 'Spectator' : 'Unknown';
+    const gameModeDisplay = 'Spectator';
 
     const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
 
@@ -214,7 +198,6 @@ function sendBotStats() {
   }
 }
 
-// Bot movement logic (simplified for spectator mode)
 function performMovement() {
   if (!bot || !bot.entity) return;
   try {
@@ -228,7 +211,6 @@ function performMovement() {
   }
 }
 
-// Bot look around logic
 function lookAround() {
   if (!bot || !bot.entity) return;
   try {
@@ -240,7 +222,6 @@ function lookAround() {
   }
 }
 
-// Setup bot intervals
 function setupIntervals() {
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
@@ -250,7 +231,6 @@ function setupIntervals() {
   setTimeout(sendBotStats, 10000);
 }
 
-// Function to start the Mineflayer bot
 function startBot() {
   clearAllIntervals();
   if (bot) {
@@ -272,7 +252,6 @@ function startBot() {
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
-        // Log socket close events if needed for debugging
       });
     }
     setTimeout(() => {
@@ -349,7 +328,6 @@ function startBot() {
   });
 }
 
-// Function to reconnect the bot
 function reconnectBot() {
   clearAllIntervals();
   reconnectTimeout = setTimeout(() => {
@@ -357,7 +335,6 @@ function reconnectBot() {
   }, RECONNECT_DELAY);
 }
 
-// Function to calculate CPU usage
 function getCpuUsage() {
   const cpus = os.cpus();
   let totalIdle = 0, totalTick = 0;
@@ -378,7 +355,6 @@ function getCpuUsage() {
   return 100 - (100 * idleDifference / totalDifference);
 }
 
-// API endpoint for bot status
 app.get('/api/status', async (req, res) => {
   try {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
@@ -398,7 +374,7 @@ app.get('/api/status', async (req, res) => {
       };
     });
 
-    const gameModeApiDisplay = bot?.gameMode === 3 ? "Spectator" : "Unknown";
+    const gameModeApiDisplay = "Spectator";
 
     let diskInfo = { free: 0, total: 0 };
     try {
@@ -425,7 +401,7 @@ app.get('/api/status', async (req, res) => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A', // Changed to 20/20
+      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
       botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
       botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
@@ -433,7 +409,7 @@ app.get('/api/status', async (req, res) => {
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
       minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A', // Pass raw ticks
+      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
     res.json(botStatus);
@@ -443,7 +419,6 @@ app.get('/api/status', async (req, res) => {
   }
 });
 
-// API endpoint for bot commands
 app.post('/api/command', async (req, res) => {
   const { command } = req.body;
   try {
@@ -474,10 +449,10 @@ app.post('/api/command', async (req, res) => {
           isBotOnline = false;
           setTimeout(() => {
             startBot();
-          }, 3000); // Wait 3 seconds before rejoining
+          }, 3000);
           res.json({ success: true, message: 'Bot is rejoining the server.' });
         } else {
-          startBot(); // If offline, just join
+          startBot();
           res.json({ success: true, message: 'Bot is attempting to join.' });
         }
         break;
@@ -490,7 +465,6 @@ app.post('/api/command', async (req, res) => {
   }
 });
 
-// API endpoint to get chat history
 app.get('/api/chat', async (req, res) => {
   try {
     const { username, date, search } = req.query;
@@ -508,7 +482,7 @@ app.get('/api/chat', async (req, res) => {
     if (search) {
       query.chat = { $regex: search, $options: 'i' };
     }
-    const messages = await MinecraftChat.find(query).sort({ timestamp: -1 }).limit(100); // Limit to 100 recent messages
+    const messages = await MinecraftChat.find(query).sort({ timestamp: -1 }).limit(100);
     res.json(messages);
   } catch (err) {
     console.error('Error fetching chat history:', err.message);
@@ -516,7 +490,6 @@ app.get('/api/chat', async (req, res) => {
   }
 });
 
-// Socket.IO real-time status updates
 io.on('connection', (socket) => {
   console.log('A user connected via Socket.IO');
   socket.on('disconnect', () => {
@@ -524,7 +497,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Emit bot status every second
 setInterval(async () => {
   try {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
@@ -548,14 +520,13 @@ setInterval(async () => {
     try {
       diskInfo = await diskusage.check('/');
     } catch (err) {
-      // Disk usage error, use default values
     }
 
     const botStatus = {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
       onlinePlayersCount: onlinePlayersCount,
       playerDetails,
-      gameMode: bot?.gameMode === 3 ? "Spectator" : (bot?.gameMode !== undefined ? bot.gameMode : 'Unknown'),
+      gameMode: "Spectator",
       position: bot?.entity?.position ?
         {
           x: Math.floor(bot.entity.position.x),
@@ -569,7 +540,7 @@ setInterval(async () => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A', // Changed to 20/20
+      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
       botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
       botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
@@ -577,7 +548,7 @@ setInterval(async () => {
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
       minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A', // Pass raw ticks
+      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
     io.emit('botStatusUpdate', botStatus);
@@ -586,15 +557,12 @@ setInterval(async () => {
   }
 }, SOCKET_IO_UPDATE_INTERVAL);
 
-//  Serve dashboard.html
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// Start the HTTP server
 server.listen(WEB_SERVER_PORT, () => {
   sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
-// Start the Mineflayer bot
-startBot();
+startBot();       
