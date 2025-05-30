@@ -1166,7 +1166,7 @@ function addChatMessage(message) {
      <div class="chat-text">${message.chat}</div>
      <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
  `;
- chatMessagesContainer.prepend(messageDiv);
+ chatMessagesContainer.append(messageDiv);
  chatMessagesContainer.scrollTop = 0;
 }
    
