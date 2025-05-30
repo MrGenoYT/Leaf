@@ -587,40 +587,47 @@
  }
 
  .dropdown-content {
-     display: none;
-     position: absolute;
-     background-color: var(--card-bg);
-     min-width: 100%; /* Occupy full width of parent */
-     box-shadow: var(--shadow-md);
-     border-radius: var(--radius-md);
-     z-index: 1;
-     max-height: 200px;
-     overflow-y: auto;
-     padding: 0.5rem 0;
-     top: 100%;
-     left: 0;
- }
+    display: none;
+    position: absolute;
+    background-color: var(--card-bg);
+    min-width: 100%;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 0.5rem;
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    z-index: 10;
+    top: 100%;
+    left: 0;
+}
 
- .dropdown-content.show {
-     display: block;
- }
+.dropdown-content.show {
+    display: block;
+}
 
- .dropdown-content button {
-     color: var(--text-primary);
-     padding: 0.75rem 1rem;
-     text-decoration: none;
-     display: block;
-     width: 100%;
-     text-align: left;
-     border: none;
-     background: none;
-     cursor: pointer;
-     font-size: 0.875rem;
- }
+.dropdown-content button {
+    display: block;
+    width: calc(100% - 0.5rem);
+    margin: 0.25rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+}
 
- .dropdown-content button:hover {
-     background-color: var(--border-color);
- }
+.dropdown-content button:hover {
+    background-color: var(--accent-color);
+    color: #ffffff;
+    border-color: var(--accent-hover);
+}
 
  @media (min-width: 768px) {
      .stats-grid {
