@@ -341,6 +341,7 @@ function startBot() {
   });
 
   bot.on('error', (err) => {
+    console.error('Bot error ❌:', err.message);
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
 
     if (err.message.includes("timed out") ||
@@ -356,23 +357,28 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        let playerFace = await PlayerFace.findOne({ username: username });
-        if (!playerFace) {
-          const assignedFaces = await PlayerFace.find({}, 'face');
-          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
-
-          let selectedFace;
-          if (availableFaces.length > 0) {
-            selectedFace = availableFaces[0];
+        let face = null;
+        if (username.startsWith('.')) {
+          const playerFace = await PlayerFace.findOne({ username: username });
+          if (playerFace) {
+            face = playerFace.face;
           } else {
-            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+            const assignedFaces = await PlayerFace.find({}, 'face');
+            const availableFaces = FACES.filter(f => !assignedFaces.some(pf => pf.face === f));
+            let selectedFace;
+            if (availableFaces.length > 0) {
+              selectedFace = availableFaces[0];
+            } else {
+              selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+            }
+            const newPlayerFace = new PlayerFace({ username: username, face: selectedFace });
+            await newPlayerFace.save();
+            face = selectedFace;
           }
-          playerFace = new PlayerFace({ username: username, face: selectedFace });
-          await playerFace.save();
         }
-        const chatMessage = new MinecraftChat({ username, chat: message, face: playerFace.face });
+        const chatMessage = new MinecraftChat({ username, chat: message });
         await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, face: playerFace.face });
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, face: face });
       } catch (err) {
         console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
