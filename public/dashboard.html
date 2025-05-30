@@ -1129,28 +1129,37 @@
  }
 
  function addChatMessage(message) {
-     const chatMessagesContainer = document.getElementById('chat-messages');
-     const messageDiv = document.createElement('div');
-     messageDiv.className = 'chat-message-item';
-     
-     const date = new Date(message.timestamp);
-     const formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-     const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    const chatMessagesContainer = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message-item';
 
-     const skinPlaceholder = message.username.startsWith('.') ? (Math.random() > 0.5 ? 'https://placehold.co/32x32/cccccc/000000?text=S' : 'https://placehold.co/32x32/cccccc/000000?text=A') : 'https://placehold.co/32x32/cccccc/000000?text=?';
-     const skinUrl = `https://crafatar.com/avatars/${message.uuid || '00000000-0000-0000-0000-000000000000'}?size=32&overlay`;
-     
-     messageDiv.innerHTML = `
-         <div class="chat-message-header">
-             <div class="chat-avatar">
-                 <img src="${skinUrl}" alt="${message.username} skin" onerror="this.onerror=null;this.src='${skinPlaceholder}';">
-             </div>
-             <div class="chat-username">${message.username}</div>
-         </div>
-         <div class="chat-text">${message.chat}</div>
-         <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
-     `;
-     chatMessagesContainer.prepend(messageDiv);
+    const date = new Date(message.timestamp);
+    const formattedDate = date.toLocaleDateString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    });
+    const formattedTime = date.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', hour12: true
+    });
+
+    let skinUrl;
+    if (message.username.startsWith('.')) {
+        const skinType = Math.random() > 0.5 ? 'steve' : 'alex';
+        skinUrl = `./${skinType}.png`;
+    } else {
+        skinUrl = `https://crafatar.com/avatars/${message.uuid || '00000000-0000-0000-0000-000000000000'}?size=32&overlay`;
+    }
+
+    messageDiv.innerHTML = `
+        <div class="chat-message-header">
+            <div class="chat-avatar">
+                <img src="${skinUrl}" alt="${message.username} skin" onerror="this.onerror=null;this.src='./alex.png';">
+            </div>
+            <div class="chat-username">${message.username}</div>
+        </div>
+        <div class="chat-text">${message.chat}</div>
+        <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
+    `;
+    chatMessagesContainer.prepend(messageDiv);
  }
 
  async function fetchChatHistory() {
