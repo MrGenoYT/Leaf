@@ -77,7 +77,8 @@ mongoose.connect(MONGO_URI)
 const chatSchema = new mongoose.Schema({
   username: String,
   chat: String,
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
+  uuid: String
 });
 const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
 
@@ -341,7 +342,6 @@ function startBot() {
   });
 
   bot.on('error', (err) => {
-    console.error('Bot error ❌:', err.message);
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
 
     if (err.message.includes("timed out") ||
@@ -357,28 +357,9 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        let face = null;
-        if (username.startsWith('.')) {
-          const playerFace = await PlayerFace.findOne({ username: username });
-          if (playerFace) {
-            face = playerFace.face;
-          } else {
-            const assignedFaces = await PlayerFace.find({}, 'face');
-            const availableFaces = FACES.filter(f => !assignedFaces.some(pf => pf.face === f));
-            let selectedFace;
-            if (availableFaces.length > 0) {
-              selectedFace = availableFaces[0];
-            } else {
-              selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-            }
-            const newPlayerFace = new PlayerFace({ username: username, face: selectedFace });
-            await newPlayerFace.save();
-            face = selectedFace;
-          }
-        }
-        const chatMessage = new MinecraftChat({ username, chat: message });
+        const chatMessage = new MinecraftChat({ username, chat: message, uuid: bot.players[username] ? bot.players[username].uuid : null });
         await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, face: face });
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, uuid: chatMessage.uuid });
       } catch (err) {
         console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
