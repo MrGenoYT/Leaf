@@ -437,7 +437,12 @@ app.get('/api/chat', async (req, res) => {
     if (search) {
       query.chat = { $regex: search, $options: 'i' };
     }
-    const messages = await MinecraftChat.find(query).sort({ timestamp: -1 }).limit(100);
+    const skip = parseInt(req.query.skip) || 0;
+    const limit = parseInt(req.query.limit) || 100;
+    const messages = await MinecraftChat.find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
     res.json(messages);
   } catch (err) {
     console.error('Error fetching chat history:', err.message);
@@ -531,4 +536,3 @@ server.listen(WEB_SERVER_PORT, () => {
 });
 
 startBot();
-
