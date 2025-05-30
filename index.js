@@ -24,7 +24,7 @@ const RECONNECT_DELAY = 10000;
 const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
 const BOT_STATS_INTERVAL = 60 * 60 * 1000;
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
-const SKIN_CHECK_INTERVAL = 60 * 60 * 1000;
+const SKIN_CHECK_INTERVAL = 10 * 60 * 1000;
 
 const ONE_HOUR = 3600 * 1000;
 const THIRTY_MINUTES = 1800 * 1000;
@@ -38,7 +38,7 @@ const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
 
 const FACES = ['steve.png', 'alex.png', 'lucy.png', 'ken.png', 'burrito.png', 'kaji.png', 'rusty.png', 'doon.png'];
-let dotUserFaceIndex = 0;
+let faceIndex = 0;
 
 const botOptions = {
   host: BOT_HOST,
@@ -64,7 +64,6 @@ let lastCpuTime = process.hrtime.bigint();
 let isMovementPaused = false;
 let movementPauseTimeout = null;
 let rejoinActivityTimeout = null;
-let skinCheckInterval = null;
 
 const app = express();
 const server = http.createServer(app);
@@ -74,24 +73,22 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .then(() => {})
+  .catch(err => console.error('MongoDB connection error ❌:', err));
 
 const chatSchema = new mongoose.Schema({
   username: String,
   chat: String,
-  timestamp: { type: Date, default: Date.now },
-  skinUrl: String
+  timestamp: { type: Date, default: Date.now }
 });
 const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
 
-const playerProfileSchema = new mongoose.Schema({
+const playerFaceSchema = new mongoose.Schema({
   username: { type: String, unique: true },
-  uuid: String,
   skinUrl: String,
   lastChecked: { type: Date, default: Date.now }
 });
-const PlayerProfile = mongoose.model('PlayerProfile', playerProfileSchema);
+const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
 
 function clearAllIntervals() {
   if (movementInterval) {
@@ -122,10 +119,6 @@ function clearAllIntervals() {
     clearTimeout(rejoinActivityTimeout);
     rejoinActivityTimeout = null;
   }
-  if (skinCheckInterval) {
-    clearInterval(skinCheckInterval);
-    skinCheckInterval = null;
-  }
 }
 
 async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR, fields = []) {
@@ -137,7 +130,7 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Discord Webhook Error:', err.message);
+    console.error('Discord Webhook Error ❌:', err.message);
   }
 }
 
@@ -150,7 +143,7 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Chat Webhook Error:', err.message);
+    console.error('Chat Webhook Error ❌:', err.message);
   }
 }
 
@@ -163,7 +156,7 @@ async function sendPlayerMessage(username, message) {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Message Webhook Error:', err.message);
+    console.error('Message Webhook Error ❌:', err.message);
   }
 }
 
@@ -193,7 +186,7 @@ function sendPlayerList() {
     }));
     sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
-    console.error('Error sending player list:', err.message);
+    console.error('Error sending player list ❌:', err.message);
   }
 }
 
@@ -228,7 +221,7 @@ function sendBotStats() {
       { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
     ]);
   } catch (err) {
-    console.error('Error sending bot stats:', err.message);
+    console.error('Error sending bot stats ❌:', err.message);
   }
 }
 
@@ -243,7 +236,7 @@ function performMovement() {
     bot.entity.position.set(targetX, currentPos.y, targetZ);
     movementCount++;
   } catch (err) {
-    console.error('Movement error:', err.message);
+    console.error('Movement error ❌:', err.message);
   }
 }
 
@@ -256,7 +249,7 @@ function lookAround() {
     const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
     bot.look(yaw, pitch, true);
   } catch (err) {
-    console.error('Look error:', err.message);
+    console.error('Look error ❌:', err.message);
   }
 }
 
@@ -266,7 +259,6 @@ function setupIntervals() {
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
   botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
   rejoinActivityTimeout = setInterval(checkBotActivity, 5000);
-  skinCheckInterval = setInterval(checkAndRefreshSkins, SKIN_CHECK_INTERVAL);
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
 }
@@ -300,28 +292,78 @@ function checkBotActivity() {
   }
 }
 
-async function getCrafatarSkinUrl(uuid) {
-  try {
-    const response = await axios.head(`https://crafatar.com/avatars/${uuid}?size=32&overlay`);
-    if (response.status === 200) {
-      return `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
+async function getPlayerSkinUrl(username, uuid) {
+  let playerFace = await PlayerFace.findOne({ username });
+  let skinUrl;
+
+  if (username.startsWith('.')) {
+    if (!playerFace) {
+      const assignedFacesCount = await PlayerFace.countDocuments({ skinUrl: { $in: FACES.map(f => `./${f}`) } });
+      let selectedFace;
+      if (assignedFacesCount < FACES.length) {
+        const assignedFaces = await PlayerFace.find({}, 'skinUrl');
+        const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.skinUrl === `./${face}`));
+        selectedFace = availableFaces[0];
+      } else {
+        selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+      }
+      skinUrl = `./${selectedFace}`;
+      playerFace = new PlayerFace({ username, skinUrl });
+      await playerFace.save();
+    } else {
+      skinUrl = playerFace.skinUrl;
     }
-  } catch (error) {
-    return null;
+  } else {
+    const crafatarUrl = `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
+    try {
+      const response = await axios.head(crafatarUrl, { timeout: 3000 });
+      if (response.status === 200) {
+        skinUrl = crafatarUrl;
+      } else {
+        skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
+      }
+    } catch (error) {
+      skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
+    }
+
+    if (playerFace) {
+      if (playerFace.skinUrl !== skinUrl) {
+        playerFace.skinUrl = skinUrl;
+        playerFace.lastChecked = Date.now();
+        await playerFace.save();
+      } else {
+        playerFace.lastChecked = Date.now();
+        await playerFace.save();
+      }
+    } else {
+      playerFace = new PlayerFace({ username, skinUrl });
+      await playerFace.save();
+    }
   }
-  return null;
+  return skinUrl;
 }
 
 async function checkAndRefreshSkins() {
-  const players = await PlayerProfile.find({});
+  const players = await PlayerFace.find({ username: { $not: /^\./ } });
   for (const player of players) {
-    if (!player.username.startsWith('.')) {
-      const crafatarUrl = await getCrafatarSkinUrl(player.uuid);
-      if (crafatarUrl && crafatarUrl !== player.skinUrl) {
-        player.skinUrl = crafatarUrl;
-        player.lastChecked = Date.now();
-        await player.save();
-      } else if (!crafatarUrl && !FACES.includes(player.skinUrl.replace('./', ''))) {
+    const crafatarUrl = `https://crafatar.com/avatars/${player.uuid}?size=32&overlay`;
+    try {
+      const response = await axios.head(crafatarUrl, { timeout: 3000 });
+      if (response.status === 200) {
+        if (player.skinUrl !== crafatarUrl) {
+          player.skinUrl = crafatarUrl;
+          player.lastChecked = Date.now();
+          await player.save();
+        }
+      } else {
+        if (!FACES.some(f => player.skinUrl === `./${f}`)) {
+          player.skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
+          player.lastChecked = Date.now();
+          await player.save();
+        }
+      }
+    } catch (error) {
+      if (!FACES.some(f => player.skinUrl === `./${f}`)) {
         player.skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
         player.lastChecked = Date.now();
         await player.save();
@@ -330,7 +372,7 @@ async function checkAndRefreshSkins() {
   }
 }
 
-async function startBot() {
+function startBot() {
   clearAllIntervals();
   if (bot) {
     bot.removeAllListeners();
@@ -397,85 +439,19 @@ async function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        let playerProfile = await PlayerProfile.findOne({ username: username });
-        let skinUrl;
-
-        if (username.startsWith('.')) {
-          if (!playerProfile) {
-            if (dotUserFaceIndex >= FACES.length) {
-              dotUserFaceIndex = Math.floor(Math.random() * FACES.length);
-            }
-            skinUrl = `./${FACES[dotUserFaceIndex]}`;
-            playerProfile = new PlayerProfile({ username: username, uuid: 'N/A', skinUrl: skinUrl });
-            await playerProfile.save();
-            dotUserFaceIndex++;
-          } else {
-            skinUrl = playerProfile.skinUrl;
-          }
-        } else {
-          if (!playerProfile || !playerProfile.skinUrl.startsWith('https://crafatar.com')) {
-            const crafatarUrl = await getCrafatarSkinUrl(bot.players[username]?.uuid);
-            if (crafatarUrl) {
-              skinUrl = crafatarUrl;
-              if (playerProfile) {
-                playerProfile.skinUrl = skinUrl;
-                playerProfile.lastChecked = Date.now();
-                await playerProfile.save();
-              } else {
-                playerProfile = new PlayerProfile({ username: username, uuid: bot.players[username]?.uuid, skinUrl: skinUrl });
-                await playerProfile.save();
-              }
-            } else {
-              skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-              if (playerProfile) {
-                playerProfile.skinUrl = skinUrl;
-                playerProfile.lastChecked = Date.now();
-                await playerProfile.save();
-              } else {
-                playerProfile = new PlayerProfile({ username: username, uuid: bot.players[username]?.uuid, skinUrl: skinUrl });
-                await playerProfile.save();
-              }
-            }
-          } else {
-            skinUrl = playerProfile.skinUrl;
-          }
-        }
-
-        const chatMessage = new MinecraftChat({ username, chat: message, skinUrl: skinUrl });
+        const chatMessage = new MinecraftChat({ username, chat: message });
         await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, skinUrl: skinUrl });
+        const skinUrl = await getPlayerSkinUrl(username, bot.players[username]?.uuid);
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, skinUrl });
       } catch (err) {
-        console.error('Error saving chat message to MongoDB:', err.message);
+        console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
     }
   });
 
   bot.on('playerJoined', async (player) => {
     if (player.username !== botOptions.username) {
-      let playerProfile = await PlayerProfile.findOne({ username: player.username });
-      if (!playerProfile) {
-        let skinUrl;
-        if (player.username.startsWith('.')) {
-          if (dotUserFaceIndex >= FACES.length) {
-            dotUserFaceIndex = Math.floor(Math.random() * FACES.length);
-          }
-          skinUrl = `./${FACES[dotUserFaceIndex]}`;
-          dotUserFaceIndex++;
-        } else {
-          const crafatarUrl = await getCrafatarSkinUrl(player.uuid);
-          skinUrl = crafatarUrl || `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-        }
-        playerProfile = new PlayerProfile({ username: player.username, uuid: player.uuid, skinUrl: skinUrl });
-        await playerProfile.save();
-      } else if (!player.username.startsWith('.') && player.uuid && playerProfile.uuid !== player.uuid) {
-        const crafatarUrl = await getCrafatarSkinUrl(player.uuid);
-        if (crafatarUrl) {
-          playerProfile.skinUrl = crafatarUrl;
-          playerProfile.uuid = player.uuid;
-          playerProfile.lastChecked = Date.now();
-          await playerProfile.save();
-        }
-      }
+      await getPlayerSkinUrl(player.username, player.uuid);
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
         { name: 'Current Players', value: `${onlinePlayersCount} (excluding bot)`, inline: true }
@@ -532,24 +508,7 @@ app.get('/api/status', async (req, res) => {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      let playerProfile = await PlayerProfile.findOne({ username: p.username });
-      let skinUrl;
-      if (playerProfile) {
-        skinUrl = playerProfile.skinUrl;
-      } else {
-        if (p.username.startsWith('.')) {
-          if (dotUserFaceIndex >= FACES.length) {
-            dotUserFaceIndex = Math.floor(Math.random() * FACES.length);
-          }
-          skinUrl = `./${FACES[dotUserFaceIndex]}`;
-          dotUserFaceIndex++;
-        } else {
-          const crafatarUrl = await getCrafatarSkinUrl(p.uuid);
-          skinUrl = crafatarUrl || `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
-        }
-        playerProfile = new PlayerProfile({ username: p.username, uuid: p.uuid, skinUrl: skinUrl });
-        await playerProfile.save();
-      }
+      const skinUrl = await getPlayerSkinUrl(p.username, p.uuid);
       return {
         username: p.username,
         uuid: p.uuid,
@@ -564,7 +523,7 @@ app.get('/api/status', async (req, res) => {
     try {
       diskInfo = await diskusage.check('/');
     } catch (err) {
-      console.error('Disk usage error:', err.message);
+      console.error('Disk usage error ❌:', err.message);
     }
 
     const botStatus = {
@@ -596,11 +555,121 @@ app.get('/api/status', async (req, res) => {
       minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
       serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
     };
+    res.json(botStatus);
+  } catch (err) {
+    console.error('Error in /api/status ❌:', err.message);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get('/api/chat', async (req, res) => {
+  try {
+    const { username, date, search } = req.query;
+    let query = {};
+    if (username) {
+      query.username = username;
+    }
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      query.timestamp = { $gte: startOfDay, $lte: endOfDay };
+    }
+    if (search) {
+      query.chat = { $regex: search, $options: 'i' };
+    }
+    const skip = parseInt(req.query.skip) || 0;
+    const limit = parseInt(req.query.limit) || 100;
+    const messages = await MinecraftChat.find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const messagesWithSkins = await Promise.all(messages.map(async msg => {
+      const skinUrl = await getPlayerSkinUrl(msg.username, bot?.players[msg.username]?.uuid);
+      return { ...msg.toObject(), skinUrl };
+    }));
+
+    res.json(messagesWithSkins);
+  } catch (err) {
+    console.error('Error fetching chat history ❌:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.get('/api/chat/usernames', async (req, res) => {
+  try {
+    const usernames = await MinecraftChat.distinct('username');
+    res.json(usernames);
+  } catch (err) {
+    console.error('Error fetching distinct usernames ❌:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+io.on('connection', (socket) => {
+  socket.on('disconnect', () => {
+  });
+});
+
+setInterval(async () => {
+  try {
+    const playersExcludingBot = getOnlinePlayersExcludingBot();
+    const onlinePlayersCount = playersExcludingBot.length;
+    const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
+      const skinUrl = await getPlayerSkinUrl(p.username, p.uuid);
+      return {
+        username: p.username,
+        uuid: p.uuid,
+        skinUrl: skinUrl,
+        ping: p.ping || 'N/A'
+      };
+    }));
+
+    let diskInfo = { free: 0, total: 0 };
+    try {
+      diskInfo = await diskusage.check('/');
+    } catch (err) {
+      console.error('Disk usage check in socket.io interval error ❌:', err.message);
+    }
+
+    const botStatus = {
+      message: isBotOnline ? "Bot is running!" : "Bot is offline",
+      onlinePlayersCount: onlinePlayersCount,
+      playerDetails,
+      gameMode: "Spectator",
+      position: bot?.entity?.position ?
+        {
+          x: Math.floor(bot.entity.position.x),
+          y: Math.floor(bot.entity.position.y),
+          z: Math.floor(bot.entity.position.z)
+        } : null,
+      uptime: botStartTime && isBotOnline ? Math.floor((Date.now() - botStartTime) / 1000) : 0,
+      movements: movementCount,
+      memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
+      lastOnline: lastOnlineTime,
+      serverHost: currentServerHost,
+      serverPort: currentServerPort,
+      botName: BOT_USERNAME,
+      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
+      botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
+      botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
+      serverLoad: os.loadavg()[0].toFixed(2),
+      cpuUsage: getCpuUsage().toFixed(2),
+      diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
+      diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
+      minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
+      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
+      serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
+    };
     io.emit('botStatusUpdate', botStatus);
   } catch (err) {
-    console.error('Error emitting status update via Socket.IO:', err.message);
+    console.error('Error emitting status update via Socket.IO ❌:', err.message);
   }
 }, SOCKET_IO_UPDATE_INTERVAL);
+
+setInterval(checkAndRefreshSkins, SKIN_CHECK_INTERVAL);
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
