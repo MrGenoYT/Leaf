@@ -72,7 +72,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 mongoose.connect(MONGO_URI)
   .then(() => {})
-  .catch(err => console.error('MongoDB connection error ❌:', err));
+  .catch(err => {});
 
 const chatSchema = new mongoose.Schema({
   username: String,
@@ -128,7 +128,6 @@ async function sendDiscordEmbed(title, description, color = DEFAULT_EMBED_COLOR,
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Discord Webhook Error ❌:', err.message);
   }
 }
 
@@ -141,7 +140,6 @@ async function sendChatEmbed(title, description, color = SUCCESS_EMBED_COLOR, fi
       embeds: [{ title, description, color, fields, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Chat Webhook Error ❌:', err.message);
   }
 }
 
@@ -154,7 +152,6 @@ async function sendPlayerMessage(username, message) {
       embeds: [{ author: { name: username }, description: message, color: SUCCESS_EMBED_COLOR, timestamp: new Date().toISOString() }],
     });
   } catch (err) {
-    console.error('Message Webhook Error ❌:', err.message);
   }
 }
 
@@ -184,7 +181,6 @@ function sendPlayerList() {
     }));
     sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
-    console.error('Error sending player list ❌:', err.message);
   }
 }
 
@@ -219,7 +215,6 @@ function sendBotStats() {
       { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
     ]);
   } catch (err) {
-    console.error('Error sending bot stats ❌:', err.message);
   }
 }
 
@@ -234,7 +229,6 @@ function performMovement() {
     bot.entity.position.set(targetX, currentPos.y, targetZ);
     movementCount++;
   } catch (err) {
-    console.error('Movement error ❌:', err.message);
   }
 }
 
@@ -247,7 +241,6 @@ function lookAround() {
     const pitch = (Math.random() * Math.PI / 3) - (Math.PI / 6);
     bot.look(yaw, pitch, true);
   } catch (err) {
-    console.error('Look error ❌:', err.message);
   }
 }
 
@@ -357,11 +350,14 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        const chatMessage = new MinecraftChat({ username, chat: message, uuid: bot.players[username] ? bot.players[username].uuid : null });
+        let uuid = null;
+        if (bot.players[username]) {
+            uuid = bot.players[username].uuid;
+        }
+        const chatMessage = new MinecraftChat({ username, chat: message, uuid });
         await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, uuid: chatMessage.uuid });
+        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, uuid });
       } catch (err) {
-        console.error('Error saving chat message to MongoDB ❌:', err.message);
       }
     }
   });
@@ -442,11 +438,13 @@ app.get('/api/status', async (req, res) => {
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
       let skinUrl;
-      if (p.username.startsWith('.')) {
+      if (p.uuid) {
+        skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
+      } else if (p.username.startsWith('.')) {
         const playerFace = await PlayerFace.findOne({ username: p.username });
         skinUrl = `./${playerFace ? playerFace.face : FACES[Math.floor(Math.random() * FACES.length)]}`;
       } else {
-        skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
+        skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
       }
       return {
         username: p.username,
@@ -462,7 +460,6 @@ app.get('/api/status', async (req, res) => {
     try {
       diskInfo = await diskusage.check('/');
     } catch (err) {
-      console.error('Disk usage error ❌:', err.message);
     }
 
     const botStatus = {
@@ -496,7 +493,6 @@ app.get('/api/status', async (req, res) => {
     };
     res.json(botStatus);
   } catch (err) {
-    console.error('Error in /api/status ❌:', err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
@@ -526,7 +522,6 @@ app.get('/api/chat', async (req, res) => {
       .limit(limit);
     res.json(messages);
   } catch (err) {
-    console.error('Error fetching chat history ❌:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -536,7 +531,6 @@ app.get('/api/chat/usernames', async (req, res) => {
     const usernames = await MinecraftChat.distinct('username');
     res.json(usernames);
   } catch (err) {
-    console.error('Error fetching distinct usernames ❌:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -552,11 +546,13 @@ setInterval(async () => {
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
       let skinUrl;
-      if (p.username.startsWith('.')) {
+      if (p.uuid) {
+        skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
+      } else if (p.username.startsWith('.')) {
         const playerFace = await PlayerFace.findOne({ username: p.username });
         skinUrl = `./${playerFace ? playerFace.face : FACES[Math.floor(Math.random() * FACES.length)]}`;
       } else {
-        skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
+        skinUrl = `./${FACES[Math.floor(Math.random() * FACES.length)]}`;
       }
       return {
         username: p.username,
@@ -570,7 +566,6 @@ setInterval(async () => {
     try {
       diskInfo = await diskusage.check('/');
     } catch (err) {
-      console.error('Disk usage check in socket.io interval error ❌:', err.message);
     }
 
     const botStatus = {
@@ -604,7 +599,6 @@ setInterval(async () => {
     };
     io.emit('botStatusUpdate', botStatus);
   } catch (err) {
-    console.error('Error emitting status update via Socket.IO ❌:', err.message);
   }
 }, SOCKET_IO_UPDATE_INTERVAL);
 
@@ -616,4 +610,4 @@ server.listen(WEB_SERVER_PORT, () => {
   sendDiscordEmbed('Web Server', `Web monitoring server started on port ${WEB_SERVER_PORT}`, DEFAULT_EMBED_COLOR);
 });
 
-startBot();
+startBot();              
