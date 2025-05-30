@@ -297,6 +297,7 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
+        // Save username with .prefix if it's a bedrock player
         const chatMessage = new MinecraftChat({ username, chat: message });
         await chatMessage.save();
         io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp });
@@ -530,3 +531,4 @@ server.listen(WEB_SERVER_PORT, () => {
 });
 
 startBot();
+
