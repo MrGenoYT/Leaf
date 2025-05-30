@@ -504,6 +504,7 @@
      background-color: var(--primary-bg);
      display: flex; /* Use flexbox for chat messages */
      flex-direction: column-reverse; /* Display latest to oldest */
+     scroll-behavior: smooth;
  }
 
  .chat-message-item {
@@ -1167,6 +1168,9 @@
         <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
     `;
     chatMessagesContainer.prepend(messageDiv);
+
+    // Auto-scroll to top (shows latest message at top)
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
  }
 
  async function fetchChatHistory() {
