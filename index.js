@@ -26,9 +26,7 @@ const BOT_STATS_INTERVAL = 60 * 60 * 1000;
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
 
 const ONE_HOUR = 3600 * 1000;
-const THIRTY_MINUTES = 1800 * 1000;
 const FIFTEEN_SECONDS = 5 * 1000;
-const ONE_MINUTE = 60 * 1000;
 
 const DEFAULT_EMBED_COLOR = 0x3498db;
 const SUCCESS_EMBED_COLOR = 0x00ff00;
@@ -59,8 +57,6 @@ let currentServerHost = BOT_HOST;
 let currentServerPort = BOT_PORT;
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTime = process.hrtime.bigint();
-let isMovementPaused = false;
-let movementPauseTimeout = null;
 let rejoinActivityTimeout = null;
 let nextDotFaceIndex = 0;
 
@@ -110,10 +106,6 @@ function clearAllIntervals() {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
-  }
-  if (movementPauseTimeout) {
-    clearTimeout(movementPauseTimeout);
-    movementPauseTimeout = null;
   }
   if (rejoinActivityTimeout) {
     clearTimeout(rejoinActivityTimeout);
@@ -226,7 +218,7 @@ function sendBotStats() {
 }
 
 function performMovement() {
-  if (!bot || !bot.entity || isMovementPaused) {
+  if (!bot || !bot.entity) {
     return;
   }
   try {
@@ -276,20 +268,6 @@ function checkBotActivity() {
     botStartTime = null;
     return;
   }
-
-  if (uptime >= THIRTY_MINUTES && !isMovementPaused) {
-    sendDiscordEmbed('Bot Activity', 'Bot active for over 30 minutes. Pausing movements for 1 minute to prevent AFK detection.', INFO_EMBED_COLOR);
-    isMovementPaused = true;
-    if (movementInterval) {
-      clearInterval(movementInterval);
-      movementInterval = null;
-    }
-    movementPauseTimeout = setTimeout(() => {
-      sendDiscordEmbed('Bot Activity', 'Resuming movements after 1 minute pause.', INFO_EMBED_COLOR);
-      isMovementPaused = false;
-      movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
-    }, ONE_MINUTE);
-  }
 }
 
 function startBot() {
@@ -302,7 +280,6 @@ function startBot() {
   botStartTime = Date.now();
   movementCount = 0;
   isBotOnline = false;
-  isMovementPaused = false;
 
   bot = mineflayer.createBot(botOptions);
 
@@ -700,8 +677,6 @@ app.get('/api/chat/usernames', async (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  socket.on('disconnect', () => {
-  });
 });
 
 setInterval(async () => {
@@ -823,4 +798,3 @@ server.listen(WEB_SERVER_PORT, () => {
 });
 
 startBot();
-      
