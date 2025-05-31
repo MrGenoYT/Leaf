@@ -21,8 +21,8 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/minecraft_
 const MOVEMENT_INTERVAL = 5000;
 const LOOK_INTERVAL = 3000;
 const RECONNECT_DELAY = 1000;
-const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
-const BOT_STATS_INTERVAL = 60 * 60 * 1000;
+const PLAYER_LIST_INTERVAL = 30 * 60 * 1000; // This interval is no longer used for periodic sending
+const BOT_STATS_INTERVAL = 60 * 60 * 1000; // This interval is no longer used for periodic sending
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
 
 const ONE_HOUR = 3600 * 1000;
@@ -47,8 +47,8 @@ let bot = null;
 let reconnectTimeout = null;
 let movementInterval = null;
 let lookInterval = null;
-let playerListInterval = null;
-let botStatsInterval = null;
+let playerListInterval = null; // No longer used for periodic sending
+let botStatsInterval = null; // No longer used for periodic sending
 let botStartTime = null;
 let movementCount = 0;
 let isBotOnline = false;
@@ -95,14 +95,7 @@ function clearAllIntervals() {
     clearInterval(lookInterval);
     lookInterval = null;
   }
-  if (playerListInterval) {
-    clearInterval(playerListInterval);
-    playerListInterval = null;
-  }
-  if (botStatsInterval) {
-    clearInterval(botStatsInterval);
-    botStatsInterval = null;
-  }
+  // playerListInterval and botStatsInterval are no longer periodic
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
@@ -202,7 +195,8 @@ function sendBotStats() {
 
     const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
 
-    sendChatEmbed('Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
+    // Changed to send to DISCORD_WEBHOOK
+    sendDiscordEmbed('Bot Status Report', `Status report for ${botOptions.username}`, INFO_EMBED_COLOR, [
       { name: 'Uptime', value: uptimeStr, inline: true },
       { name: 'Position', value: posStr, inline: true },
       { name: 'Game Mode', value: gameModeDisplay, inline: true },
@@ -248,9 +242,9 @@ function lookAround() {
 function setupIntervals() {
   movementInterval = setInterval(performMovement, MOVEMENT_INTERVAL);
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
-  playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
-  botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
+  // Removed periodic playerListInterval and botStatsInterval
   rejoinActivityTimeout = setInterval(checkBotActivity, 5000);
+  // Initial sends for player list and bot stats after bot spawns
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
 }
@@ -298,27 +292,30 @@ function startBot() {
     }, 1000);
   });
 
-  bot.on('game', () => {
-    if (bot.gameMode === 3) {
-      sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
-    } else {
-      sendDiscordEmbed('Mode Change', `${botOptions.username} entered an unknown game mode (${bot.gameMode}).`, WARNING_EMBED_COLOR);
-    }
-  });
+  // Removed 'game' event listener to stop "Mode Change" embeds
+  // bot.on('game', () => {
+  //   if (bot.gameMode === 3) {
+  //     sendDiscordEmbed('Mode Change', `${botOptions.username} entered spectator mode.`, INFO_EMBED_COLOR);
+  //   } else {
+  //     sendDiscordEmbed('Mode Change', `${botOptions.username} entered an unknown game mode (${bot.gameMode}).`, WARNING_EMBED_COLOR);
+  //   }
+  // });
 
-  bot.on('end', (reason) => {
-    sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
-    isBotOnline = false;
-    clearAllIntervals();
-    reconnectBot();
-  });
+  // Removed 'end' event listener to stop "Bot Disconnect" embeds
+  // bot.on('end', (reason) => {
+  //   sendDiscordEmbed('Bot Disconnect', `${botOptions.username} was disconnected. Reason: ${reason}.`, ERROR_EMBED_COLOR);
+  //   isBotOnline = false;
+  //   clearAllIntervals();
+  //   reconnectBot();
+  // });
 
-  bot.on('kicked', (reason) => {
-    sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
-    isBotOnline = false;
-    clearAllIntervals();
-    reconnectBot();
-  });
+  // Removed 'kicked' event listener to stop "Bot Kicked" embeds
+  // bot.on('kicked', (reason) => {
+  //   sendDiscordEmbed('Bot Kicked', `${botOptions.username} was kicked. Reason: ${reason}.`, ERROR_EMBED_COLOR);
+  //   isBotOnline = false;
+  //   clearAllIntervals();
+  //   reconnectBot();
+  // });
 
   bot.on('error', (err) => {
     sendDiscordEmbed('Bot Error', `Error: ${err.message}`, ERROR_EMBED_COLOR);
@@ -334,7 +331,7 @@ function startBot() {
 
   bot.on('chat', async (username, message) => {
     if (username !== botOptions.username) {
-      sendPlayerMessage(username, message);
+      sendPlayerMessage(username, message); // This remains unchanged for MESSAGE_WEBHOOK
       try {
         let playerFace = await PlayerFace.findOne({ username: username });
         let skinUrl;
@@ -464,6 +461,7 @@ function startBot() {
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
         { name: 'Current Players', value: `${onlinePlayersCount} (excluding bot)`, inline: true }
       ]);
+      sendPlayerList(); // Send updated player list when a player joins
     }
   });
 
@@ -473,6 +471,7 @@ function startBot() {
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
         { name: 'Current Players', value: `${Math.max(0, onlinePlayersCount)} (excluding bot)`, inline: true }
       ]);
+      sendPlayerList(); // Send updated player list when a player leaves
     }
   });
 }
