@@ -45,7 +45,6 @@ let bot = null;
 let reconnectTimeout = null;
 let movementInterval = null;
 let lookInterval = null;
-let rejoinActivityTimeout = null;
 let botStartTime = null;
 let movementCount = 0;
 let isBotOnline = false;
@@ -54,6 +53,7 @@ let currentServerHost = BOT_HOST;
 let currentServerPort = BOT_PORT;
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTime = process.hrtime.bigint();
+let rejoinActivityTimeout = null;
 let nextDotFaceIndex = 0;
 
 const app = express();
@@ -273,7 +273,6 @@ function startBot() {
     sendDiscordEmbed('Bot Connected', `${botOptions.username} has joined the server.`, SUCCESS_EMBED_COLOR);
     isBotOnline = true;
     lastOnlineTime = Date.now();
-    io.emit('botJoinedServer');
 
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
