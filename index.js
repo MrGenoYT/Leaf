@@ -20,7 +20,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/minecraft_
 
 const MOVEMENT_INTERVAL = 5000;
 const LOOK_INTERVAL = 3000;
-const RECONNECT_DELAY = 1000;
+const RECONNECT_DELAY = 3000;
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
 
 const ONE_HOUR = 3600 * 1000;
