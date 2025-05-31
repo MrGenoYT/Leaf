@@ -20,14 +20,14 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/minecraft_
 
 const MOVEMENT_INTERVAL = 5000;
 const LOOK_INTERVAL = 3000;
-const RECONNECT_DELAY = 10000;
+const RECONNECT_DELAY = 5000;
 const PLAYER_LIST_INTERVAL = 30 * 60 * 1000;
 const BOT_STATS_INTERVAL = 60 * 60 * 1000;
 const SOCKET_IO_UPDATE_INTERVAL = 1000;
 
 const ONE_HOUR = 3600 * 1000;
 const THIRTY_MINUTES = 1800 * 1000;
-const FIFTEEN_SECONDS = 15 * 1000;
+const FIFTEEN_SECONDS = 5 * 1000;
 const ONE_MINUTE = 60 * 1000;
 
 const DEFAULT_EMBED_COLOR = 0x3498db;
@@ -36,7 +36,6 @@ const WARNING_EMBED_COLOR = 0xff9900;
 const ERROR_EMBED_COLOR = 0xff0000;
 const INFO_EMBED_COLOR = 0x9b59b6;
 
-// Predefined fallback skins
 const FACES = ['steve.png', 'alex.png', 'lucy.png', 'ken.png', 'burrito.png', 'kaji.png', 'rusty.png', 'doon.png'];
 
 const botOptions = {
@@ -63,7 +62,7 @@ let lastCpuTime = process.hrtime.bigint();
 let isMovementPaused = false;
 let movementPauseTimeout = null;
 let rejoinActivityTimeout = null;
-let nextDotFaceIndex = 0; // To keep track of the next sequential face for '.' usernames
+let nextDotFaceIndex = 0;
 
 const app = express();
 const server = http.createServer(app);
@@ -85,8 +84,8 @@ const MinecraftChat = mongoose.model('MinecraftChat', chatSchema);
 
 const playerFaceSchema = new mongoose.Schema({
   username: { type: String, unique: true },
-  face: String, // Stores the filename of the assigned face (e.g., 'steve.png') or the crafatar URL
-  isCustom: { type: Boolean, default: false }, // True if from crafatar, false if from FACES
+  face: String,
+  isCustom: { type: Boolean, default: false },
   lastUpdated: { type: Date, default: Date.now }
 });
 const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
@@ -259,7 +258,7 @@ function setupIntervals() {
   lookInterval = setInterval(lookAround, LOOK_INTERVAL);
   playerListInterval = setInterval(sendPlayerList, PLAYER_LIST_INTERVAL);
   botStatsInterval = setInterval(sendBotStats, BOT_STATS_INTERVAL);
-  rejoinActivityTimeout = setInterval(checkBotActivity, 5000); // Check every 5 seconds
+  rejoinActivityTimeout = setInterval(checkBotActivity, 5000);
   setTimeout(sendPlayerList, 5000);
   setTimeout(sendBotStats, 10000);
 }
@@ -371,9 +370,9 @@ function startBot() {
             let selectedFace;
             if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
               selectedFace = FACES[nextDotFaceIndex];
-              nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length; // Move to the next sequential face
+              nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
             } else {
-              selectedFace = FACES[Math.floor(Math.random() * FACES.length)]; // Random if all used or index out of bounds
+              selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
             }
             playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
             skinUrl = `./${selectedFace}`;
@@ -397,7 +396,6 @@ function startBot() {
           await playerFace.save();
         } else {
           if (!playerFace.isCustom && !username.startsWith('.')) {
-            // If it was a fallback and now crafatar might work, try to update
             try {
               const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${bot.players[username].uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
               if (crafatarResponse.status === 200) {
@@ -407,10 +405,10 @@ function startBot() {
                 playerFace.lastUpdated = Date.now();
                 await playerFace.save();
               } else {
-                skinUrl = `./${playerFace.face}`; // Keep existing fallback
+                skinUrl = `./${playerFace.face}`;
               }
             } catch (crafatarError) {
-              skinUrl = `./${playerFace.face}`; // Keep existing fallback
+              skinUrl = `./${playerFace.face}`;
             }
           } else {
             skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
@@ -483,7 +481,7 @@ function startBot() {
           skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
         }
       }
-      player.skinUrl = skinUrl; // Attach skinUrl to player object for immediate use
+      player.skinUrl = skinUrl;
 
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
@@ -679,7 +677,6 @@ app.get('/api/chat', async (req, res) => {
       if (playerFace) {
         skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
       } else {
-        // Fallback if somehow a chat message exists without a stored face (shouldn't happen with new logic)
         skinUrl = msg.username.startsWith('.') ? `./${FACES[0]}` : `https://crafatar.com/avatars/00000000-0000-0000-0000-000000000000?size=32&overlay`;
       }
       return { ...msg.toObject(), skinUrl };
@@ -826,3 +823,4 @@ server.listen(WEB_SERVER_PORT, () => {
 });
 
 startBot();
+      
