@@ -419,20 +419,20 @@ width: 100%;
 
 .chat-filter-buttons select,
 .chat-filter-buttons .date-picker-wrapper {
-flex: 1;
-display: flex;
-align-items: center;
-justify-content: center;
-padding: 0.75rem 0.75rem;
-border: 1px solid var(--border-color);
-border-radius: var(--radius-md);
-font-size: 0.875rem;
-color: var(--text-primary);
-background-color: var(--primary-bg);
-cursor: pointer;
-transition: background-color 0.2s ease, border-color 0.2s ease;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  background-color: var(--primary-bg);
+  cursor: pointer;
+  min-width: 120px;
+  transition: none;
 }
-
 .chat-filter-buttons select {
 -webkit-appearance: none;
 -moz-appearance: none;
@@ -445,12 +445,12 @@ text-align: center;
 
 .chat-filter-buttons select.active-filter,
 .chat-filter-buttons .date-picker-wrapper.active-filter {
-border-color: var(--accent-color);
+  border-color: black;
 }
 
 .chat-filter-buttons select:hover,
 .chat-filter-buttons .date-picker-wrapper:hover {
-background-color: var(--border-color);
+  background-color: transparent;
 }
 
 .date-picker-wrapper {
@@ -480,7 +480,10 @@ height: 18px;
 }
 
 .date-picker-wrapper .date-text {
-font-weight: 500;
+  font-weight: 500;
+  min-width: 80px;
+  display: inline-block;
+  text-align: center;
 }
 
 .date-picker-wrapper .vertical-border {
