@@ -45,6 +45,7 @@ let bot = null;
 let reconnectTimeout = null;
 let movementInterval = null;
 let lookInterval = null;
+let rejoinActivityTimeout = null;
 let botStartTime = null;
 let movementCount = 0;
 let isBotOnline = false;
@@ -53,7 +54,6 @@ let currentServerHost = BOT_HOST;
 let currentServerPort = BOT_PORT;
 let lastCpuUsage = process.cpuUsage();
 let lastCpuTime = process.hrtime.bigint();
-let rejoinActivityTimeout = null;
 let nextDotFaceIndex = 0;
 
 const app = express();
@@ -256,6 +256,65 @@ function checkBotActivity() {
   }
 }
 
+async function getOrCreatePlayerFace(username, uuid) {
+  let playerFace = await PlayerFace.findOne({ username: username });
+  let skinUrl;
+
+  if (!playerFace) {
+    if (username.startsWith('.')) {
+      const assignedFaces = await PlayerFace.find({ username: { $regex: '^\.' } }, 'face');
+      const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
+
+      let selectedFace;
+      if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
+        selectedFace = FACES[nextDotFaceIndex];
+        nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
+      } else {
+        selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+      }
+      playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
+      skinUrl = `./${selectedFace}`;
+    } else {
+      try {
+        const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
+        if (crafatarResponse.status === 200) {
+          skinUrl = `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
+          playerFace = new PlayerFace({ username: username, face: skinUrl, isCustom: true });
+        } else {
+          const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+          skinUrl = `./${selectedFace}`;
+          playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
+        }
+      } catch (crafatarError) {
+        const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
+        skinUrl = `./${selectedFace}`;
+        playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
+      }
+    }
+    await playerFace.save();
+  } else {
+    if (!playerFace.isCustom && !username.startsWith('.')) {
+      try {
+        const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
+        if (crafatarResponse.status === 200) {
+          skinUrl = `https://crafatar.com/avatars/${uuid}?size=32&overlay`;
+          playerFace.face = skinUrl;
+          playerFace.isCustom = true;
+          playerFace.lastUpdated = Date.now();
+          await playerFace.save();
+        } else {
+          skinUrl = `./${playerFace.face}`;
+        }
+      } catch (crafatarError) {
+        skinUrl = `./${playerFace.face}`;
+      }
+    } else {
+      skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
+    }
+  }
+  return skinUrl;
+}
+
 function startBot() {
   clearAllIntervals();
   if (bot) {
@@ -300,61 +359,8 @@ function startBot() {
     if (username !== botOptions.username) {
       sendPlayerMessage(username, message);
       try {
-        let playerFace = await PlayerFace.findOne({ username: username });
-        let skinUrl;
-
-        if (!playerFace) {
-          if (username.startsWith('.')) {
-            const assignedFaces = await PlayerFace.find({ username: { $regex: '^\.' } }, 'face');
-            const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
-
-            let selectedFace;
-            if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
-              selectedFace = FACES[nextDotFaceIndex];
-              nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
-            } else {
-              selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-            }
-            playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
-            skinUrl = `./${selectedFace}`;
-          } else {
-            try {
-              const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${bot.players[username].uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
-              if (crafatarResponse.status === 200) {
-                skinUrl = `https://crafatar.com/avatars/${bot.players[username].uuid}?size=32&overlay`;
-                playerFace = new PlayerFace({ username: username, face: skinUrl, isCustom: true });
-              } else {
-                const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-                skinUrl = `./${selectedFace}`;
-                playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
-              }
-            } catch (crafatarError) {
-              const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-              skinUrl = `./${selectedFace}`;
-              playerFace = new PlayerFace({ username: username, face: selectedFace, isCustom: false });
-            }
-          }
-          await playerFace.save();
-        } else {
-          if (!playerFace.isCustom && !username.startsWith('.')) {
-            try {
-              const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${bot.players[username].uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
-              if (crafatarResponse.status === 200) {
-                skinUrl = `https://crafatar.com/avatars/${bot.players[username].uuid}?size=32&overlay`;
-                playerFace.face = skinUrl;
-                playerFace.isCustom = true;
-                playerFace.lastUpdated = Date.now();
-                await playerFace.save();
-              } else {
-                skinUrl = `./${playerFace.face}`;
-              }
-            } catch (crafatarError) {
-              skinUrl = `./${playerFace.face}`;
-            }
-          } else {
-            skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
-          }
-        }
+        const uuid = bot.players[username] ? bot.players[username].uuid : null;
+        const skinUrl = await getOrCreatePlayerFace(username, uuid);
 
         const chatMessage = new MinecraftChat({ username, chat: message });
         await chatMessage.save();
@@ -367,61 +373,7 @@ function startBot() {
 
   bot.on('playerJoined', async (player) => {
     if (player.username !== botOptions.username) {
-      let playerFace = await PlayerFace.findOne({ username: player.username });
-      let skinUrl;
-
-      if (!playerFace) {
-        if (player.username.startsWith('.')) {
-          const assignedFaces = await PlayerFace.find({ username: { $regex: '^\.' } }, 'face');
-          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
-
-          let selectedFace;
-          if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
-            selectedFace = FACES[nextDotFaceIndex];
-            nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
-          } else {
-            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-          }
-          playerFace = new PlayerFace({ username: player.username, face: selectedFace, isCustom: false });
-          skinUrl = `./${selectedFace}`;
-        } else {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${player.uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${player.uuid}?size=32&overlay`;
-              playerFace = new PlayerFace({ username: player.username, face: skinUrl, isCustom: true });
-            } else {
-              const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-              skinUrl = `./${selectedFace}`;
-              playerFace = new PlayerFace({ username: player.username, face: selectedFace, isCustom: false });
-            }
-          } catch (crafatarError) {
-            const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-            skinUrl = `./${selectedFace}`;
-            playerFace = new PlayerFace({ username: player.username, face: selectedFace, isCustom: false });
-          }
-        }
-        await playerFace.save();
-      } else {
-        if (!playerFace.isCustom && !player.username.startsWith('.')) {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${player.uuid}?size=32&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${player.uuid}?size=32&overlay`;
-              playerFace.face = skinUrl;
-              playerFace.isCustom = true;
-              playerFace.lastUpdated = Date.now();
-              await playerFace.save();
-            } else {
-              skinUrl = `./${playerFace.face}`;
-            }
-          } catch (crafatarError) {
-            skinUrl = `./${playerFace.face}`;
-          }
-        } else {
-          skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
-        }
-      }
+      const skinUrl = await getOrCreatePlayerFace(player.username, player.uuid);
       player.skinUrl = skinUrl;
 
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
@@ -482,61 +434,7 @@ app.get('/api/status', async (req, res) => {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      let skinUrl;
-      let playerFace = await PlayerFace.findOne({ username: p.username });
-
-      if (!playerFace) {
-        if (p.username.startsWith('.')) {
-          const assignedFaces = await PlayerFace.find({ username: { $regex: '^\.' } }, 'face');
-          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
-
-          let selectedFace;
-          if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
-            selectedFace = FACES[nextDotFaceIndex];
-            nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
-          } else {
-            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-          }
-          playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-          skinUrl = `./${selectedFace}`;
-        } else {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${p.uuid}?size=24&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
-              playerFace = new PlayerFace({ username: p.username, face: skinUrl, isCustom: true });
-            } else {
-              const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-              skinUrl = `./${selectedFace}`;
-              playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-            }
-          } catch (crafatarError) {
-            const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-            skinUrl = `./${selectedFace}`;
-            playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-          }
-        }
-        await playerFace.save();
-      } else {
-        if (!playerFace.isCustom && !p.username.startsWith('.')) {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${p.uuid}?size=24&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
-              playerFace.face = skinUrl;
-              playerFace.isCustom = true;
-              playerFace.lastUpdated = Date.now();
-              await playerFace.save();
-            } else {
-              skinUrl = `./${playerFace.face}`;
-            }
-          } catch (crafatarError) {
-            skinUrl = `./${playerFace.face}`;
-          }
-        } else {
-          skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
-        }
-      }
+      const skinUrl = await getOrCreatePlayerFace(p.username, p.uuid);
       return {
         username: p.username,
         uuid: p.uuid,
@@ -615,13 +513,7 @@ app.get('/api/chat', async (req, res) => {
       .limit(limit);
 
     const messagesWithFaces = await Promise.all(messages.map(async (msg) => {
-      let playerFace = await PlayerFace.findOne({ username: msg.username });
-      let skinUrl;
-      if (playerFace) {
-        skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
-      } else {
-        skinUrl = msg.username.startsWith('.') ? `./${FACES[0]}` : `https://crafatar.com/avatars/00000000-0000-0000-0000-000000000000?size=32&overlay`;
-      }
+      const skinUrl = await getOrCreatePlayerFace(msg.username, null); // Pass null for UUID as it's not available from chat history directly
       return { ...msg.toObject(), skinUrl };
     }));
 
@@ -650,61 +542,7 @@ setInterval(async () => {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      let skinUrl;
-      let playerFace = await PlayerFace.findOne({ username: p.username });
-
-      if (!playerFace) {
-        if (p.username.startsWith('.')) {
-          const assignedFaces = await PlayerFace.find({ username: { $regex: '^\.' } }, 'face');
-          const availableFaces = FACES.filter(face => !assignedFaces.some(pf => pf.face === face));
-
-          let selectedFace;
-          if (availableFaces.length > 0 && nextDotFaceIndex < FACES.length) {
-            selectedFace = FACES[nextDotFaceIndex];
-            nextDotFaceIndex = (nextDotFaceIndex + 1) % FACES.length;
-          } else {
-            selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-          }
-          playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-          skinUrl = `./${selectedFace}`;
-        } else {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${p.uuid}?size=24&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
-              playerFace = new PlayerFace({ username: p.username, face: skinUrl, isCustom: true });
-            } else {
-              const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-              skinUrl = `./${selectedFace}`;
-              playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-            }
-          } catch (crafatarError) {
-            const selectedFace = FACES[Math.floor(Math.random() * FACES.length)];
-            skinUrl = `./${selectedFace}`;
-            playerFace = new PlayerFace({ username: p.username, face: selectedFace, isCustom: false });
-          }
-        }
-        await playerFace.save();
-      } else {
-        if (!playerFace.isCustom && !p.username.startsWith('.')) {
-          try {
-            const crafatarResponse = await axios.get(`https://crafatar.com/avatars/${p.uuid}?size=24&overlay`, { responseType: 'arraybuffer' });
-            if (crafatarResponse.status === 200) {
-              skinUrl = `https://crafatar.com/avatars/${p.uuid}?size=24&overlay`;
-              playerFace.face = skinUrl;
-              playerFace.isCustom = true;
-              playerFace.lastUpdated = Date.now();
-              await playerFace.save();
-            } else {
-              skinUrl = `./${playerFace.face}`;
-            }
-          } catch (crafatarError) {
-            skinUrl = `./${playerFace.face}`;
-          }
-        } else {
-          skinUrl = playerFace.isCustom ? playerFace.face : `./${playerFace.face}`;
-        }
-      }
+      const skinUrl = await getOrCreatePlayerFace(p.username, p.uuid);
       return {
         username: p.username,
         uuid: p.uuid,
