@@ -1258,27 +1258,50 @@ updateStatus(data);
 });
 
 socket.on('chatMessage', (message) => {
-const usernameFilter = document.getElementById('chat-sort-username').value || '';
-const dateFilter = document.getElementById('chat-sort-date').value;
-const searchFilter = document.getElementById('chat-search').value;
+  const usernameFilter = document.getElementById('chat-sort-username').value || '';
+  const dateFilter = document.getElementById('chat-sort-date').value;
+  const searchFilter = document.getElementById('chat-search').value;
 
-const messageDate = new Date(message.timestamp).toISOString().split('T')[0];
+  const messageDate = new Date(message.timestamp).toISOString().split('T')[0];
 
-const matchesUsername = !usernameFilter || message.username === usernameFilter;
-const matchesDate = !dateFilter || messageDate === dateFilter;
-const matchesSearch = !searchFilter || message.chat.toLowerCase().includes(searchFilter.toLowerCase());
+  const matchesUsername = !usernameFilter || message.username === usernameFilter;
+  const matchesDate = !dateFilter || messageDate === dateFilter;
+  const matchesSearch = !searchFilter || message.chat.toLowerCase().includes(searchFilter.toLowerCase());
 
-if (matchesUsername && matchesDate && matchesSearch) {
-const chatMessagesContainer = document.getElementById('chat-messages');
-const noChatAvailableMessage = chatMessagesContainer.querySelector('#chat-status-message');
-if (noChatAvailableMessage) {
-  noChatAvailableMessage.remove();
-}
-addChatMessage(message);
-applyChatBorders();
-}
+  if (matchesUsername && matchesDate && matchesSearch) {
+    const chatMessagesContainer = document.getElementById('chat-messages');
+    const noChatAvailableMessage = chatMessagesContainer.querySelector('#chat-status-message');
+    if (noChatAvailableMessage) {
+      noChatAvailableMessage.remove();
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message-item';
+    messageDiv.dataset.timestamp = message.timestamp;
+
+    const date = new Date(message.timestamp);
+    const formattedDate = date.toLocaleDateString('en-US', {
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    });
+    const formattedTime = date.toLocaleTimeString([], {
+      hour: '2-digit', minute: '2-digit', hour12: true
+    });
+
+    messageDiv.innerHTML = `
+      <div class="chat-message-header">
+          <div class="chat-avatar">
+              <img src="${message.skinUrl}" alt="${message.username} skin" onerror="this.onerror=null;this.src='https://placehold.co/32x32/cccccc/000000?text=?';">
+          </div>
+          <div class="chat-username">${message.username}</div>
+      </div>
+      <div class="chat-text">${message.chat}</div>
+      <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
+    `;
+
+    chatMessagesContainer.insertBefore(messageDiv, chatMessagesContainer.firstChild);
+    applyChatBorders();
+  }
 });
-
 handleError();
 </script>
 </body>
