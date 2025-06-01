@@ -542,10 +542,25 @@ margin-bottom: 0;
 padding-bottom: 0;
 }
 
-.chat-message-item.minute-separator {
-border-top: 1px solid var(--border-color);
-padding-top: 1rem;
-margin-top: 1rem;
+.chat-date-group {
+width: 100%;
+text-align: center;
+margin: 1.5rem 0 1rem 0;
+font-size: 0.875rem;
+color: var(--text-secondary);
+position: sticky;
+top: 0;
+background-color: var(--primary-bg);
+padding: 0.5rem 0;
+z-index: 10;
+}
+
+.chat-minute-group {
+width: 100%;
+text-align: center;
+margin: 1rem 0 0.5rem 0;
+font-size: 0.75rem;
+color: var(--text-muted);
 }
 
 .chat-message-header {
@@ -587,19 +602,6 @@ font-size: 0.75rem;
 color: var(--text-muted);
 margin-top: 0.25rem;
 margin-left: 40px;
-}
-
-.chat-date-group {
-text-align: center;
-margin: 1.5rem 0 1rem 0;
-font-weight: 600;
-color: var(--text-primary);
-position: sticky;
-top: 0;
-background-color: var(--primary-bg);
-z-index: 10;
-padding: 0.5rem 0;
-border-bottom: 1px solid var(--border-color);
 }
 
 .minecraft-time-display {
@@ -967,8 +969,8 @@ let chatMessagesSkip = 0;
 let chatMessagesLimit = 50;
 let chatLoading = false;
 let chatEndReached = false;
-let lastDateDisplayed = null;
-let lastMinuteGroupTimestamp = null;
+let lastDisplayedDate = null;
+let lastDisplayedMinuteGroup = null;
 
 function formatUptime(seconds) {
 const hours = Math.floor(seconds / 3600);
@@ -1092,50 +1094,51 @@ playerListContainer.innerHTML = '<p class="info-label" style="text-align: center
 }
 }
 
-function addChatMessage(message, isNewMessage = false) {
+function addChatMessage(message, prepend = false) {
 const chatMessagesContainer = document.getElementById('chat-messages');
 const messageDate = new Date(message.timestamp);
 const today = new Date();
-today.setHours(0, 0, 0, 0);
 const yesterday = new Date(today);
 yesterday.setDate(today.getDate() - 1);
 
-const messageDay = new Date(messageDate);
-messageDay.setHours(0, 0, 0, 0);
+const isToday = messageDate.toDateString() === today.toDateString();
+const isYesterday = messageDate.toDateString() === yesterday.toDateString();
 
 let dateHeader = '';
-if (messageDay.getTime() === today.getTime()) {
-    dateHeader = 'Today';
-} else if (messageDay.getTime() === yesterday.getTime()) {
-    dateHeader = 'Yesterday';
+let currentDayString;
+
+if (isToday) {
+    currentDayString = 'Today';
+} else if (isYesterday) {
+    currentDayString = 'Yesterday';
 } else {
-    dateHeader = messageDate.toLocaleDateString('en-GB', {
-        day: '2-digit', month: '2-digit', year: '2-digit'
-    });
+    currentDayString = messageDate.toLocaleDateString('en-GB');
 }
 
-if (lastDateDisplayed !== dateHeader) {
-    const dateGroupDiv = document.createElement('div');
-    dateGroupDiv.className = 'chat-date-group';
-    dateGroupDiv.textContent = dateHeader;
-    if (isNewMessage) {
-        chatMessagesContainer.insertBefore(dateGroupDiv, chatMessagesContainer.firstChild);
-    } else {
-        chatMessagesContainer.appendChild(dateGroupDiv);
-    }
-    lastDateDisplayed = dateHeader;
-    lastMinuteGroupTimestamp = null;
+if (currentDayString !== lastDisplayedDate) {
+    dateHeader = `<div class="chat-date-group">${currentDayString}</div>`;
+    lastDisplayedDate = currentDayString;
+    lastDisplayedMinuteGroup = null;
+}
+
+const currentMinuteGroup = Math.floor(messageDate.getTime() / (10 * 60 * 1000));
+
+let minuteGroupHeader = '';
+if (currentMinuteGroup !== lastDisplayedMinuteGroup) {
+    const formattedTime = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    minuteGroupHeader = `<div class="chat-minute-group">${formattedTime}</div>`;
+    lastDisplayedMinuteGroup = currentMinuteGroup;
 }
 
 const messageDiv = document.createElement('div');
 messageDiv.className = 'chat-message-item';
 messageDiv.dataset.timestamp = message.timestamp;
 
-const formattedTime = messageDate.toLocaleTimeString([], {
-    hour: '2-digit', minute: '2-digit', hour12: true
-});
+const formattedTime = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
 messageDiv.innerHTML = `
+   ${dateHeader}
+   ${minuteGroupHeader}
    <div class="chat-message-header">
        <div class="chat-avatar">
            <img src="${message.skinUrl}" alt="${message.username} skin" onerror="this.onerror=null;this.src='https://placehold.co/32x32/cccccc/000000?text=?';">
@@ -1146,37 +1149,12 @@ messageDiv.innerHTML = `
    <div class="chat-timestamp">${formattedTime}</div>
 `;
 
-if (isNewMessage) {
+if (prepend) {
     chatMessagesContainer.insertBefore(messageDiv, chatMessagesContainer.firstChild);
 } else {
     chatMessagesContainer.appendChild(messageDiv);
 }
 }
-
-function applyChatBorders() {
-const chatMessagesContainer = document.getElementById('chat-messages');
-const messageItems = Array.from(chatMessagesContainer.children).filter(el => el.classList.contains('chat-message-item'));
-
-for (let i = 0; i < messageItems.length; i++) {
-    const currentMsgElement = messageItems[i];
-    const currentTimestamp = new Date(currentMsgElement.dataset.timestamp);
-
-    currentMsgElement.classList.remove('minute-separator');
-
-    if (i === messageItems.length - 1) continue;
-
-    const nextMsgElement = messageItems[i + 1];
-    const nextTimestamp = new Date(nextMsgElement.dataset.timestamp);
-
-    const currentMinuteGroup = Math.floor(currentTimestamp.getTime() / (10 * 60 * 1000));
-    const nextMinuteGroup = Math.floor(nextTimestamp.getTime() / (10 * 60 * 1000));
-
-    if (currentMinuteGroup !== nextMinuteGroup) {
-        currentMsgElement.classList.add('minute-separator');
-    }
-}
-}
-
 
 async function fetchChatHistory() {
 if (chatLoading || chatEndReached) return;
@@ -1185,9 +1163,7 @@ chatLoading = true;
 const chatMessagesContainer = document.getElementById('chat-messages');
 const isInitialLoad = chatMessagesSkip === 0;
 if (isInitialLoad) {
- chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">Fetching chats...</p>';
- lastDateDisplayed = null;
- lastMinuteGroupTimestamp = null;
+chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">Fetching chats...</p>';
 }
 
 const usernameFilter = document.getElementById('chat-sort-username').value || '';
@@ -1208,6 +1184,8 @@ const messages = await response.json();
 
 if (isInitialLoad) {
  chatMessagesContainer.innerHTML = '';
+ lastDisplayedDate = null;
+ lastDisplayedMinuteGroup = null;
 }
 
 if (messages.length === 0) {
@@ -1218,10 +1196,7 @@ if (messages.length === 0) {
  return;
 }
 
-messages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
 messages.forEach(msg => addChatMessage(msg));
-applyChatBorders();
 
 chatMessagesSkip += messages.length;
 
@@ -1258,6 +1233,10 @@ console.error('Error fetching usernames:', error);
 }
 }
 
+function handleError() {
+console.log("Error handling function called.");
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 document.getElementById('current-year').textContent = new Date().getFullYear();
 
@@ -1265,8 +1244,8 @@ document.getElementById('chat-search').addEventListener('input', () => {
 chatMessagesSkip = 0;
 chatEndReached = false;
 document.getElementById('chat-messages').innerHTML = '';
-lastDateDisplayed = null;
-lastMinuteGroupTimestamp = null;
+lastDisplayedDate = null;
+lastDisplayedMinuteGroup = null;
 fetchChatHistory();
 });
 
@@ -1278,24 +1257,24 @@ usernameSelect.addEventListener('change', () => {
 chatMessagesSkip = 0;
 chatEndReached = false;
 document.getElementById('chat-messages').innerHTML = '';
-lastDateDisplayed = null;
-lastMinuteGroupTimestamp = null;
+lastDisplayedDate = null;
+lastDisplayedMinuteGroup = null;
 fetchChatHistory();
 });
 
 dateSortDateInput.addEventListener('change', (event) => {
 const selectedDate = event.target.value;
 if (selectedDate) {
-  const [year, month, day] = selectedDate.split('-');
-  chatDateDisplay.textContent = `${day}/${month}/${year.substring(2)}`;
+  const dateParts = selectedDate.split('-');
+  chatDateDisplay.textContent = `${dateParts[2]}/${dateParts[1]}/${dateParts[0].substring(2)}`;
 } else {
   chatDateDisplay.textContent = 'Date';
 }
 chatMessagesSkip = 0;
 chatEndReached = false;
 document.getElementById('chat-messages').innerHTML = '';
-lastDateDisplayed = null;
-lastMinuteGroupTimestamp = null;
+lastDisplayedDate = null;
+lastDisplayedMinuteGroup = null;
 fetchChatHistory();
 });
 
@@ -1334,11 +1313,10 @@ socket.on('chatMessage', (message) => {
    if (noChatAvailableMessage) {
      noChatAvailableMessage.remove();
    }
-
    addChatMessage(message, true);
-   applyChatBorders();
  }
 });
+handleError();
 </script>
 </body>
 </html>
