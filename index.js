@@ -513,7 +513,7 @@ app.get('/api/chat', async (req, res) => {
       .limit(limit);
 
     const messagesWithFaces = await Promise.all(messages.map(async (msg) => {
-      const skinUrl = await getOrCreatePlayerFace(msg.username, null); // Pass null for UUID as it's not available from chat history directly
+      const skinUrl = await getOrCreatePlayerFace(msg.username, null);
       return { ...msg.toObject(), skinUrl };
     }));
 
