@@ -1099,7 +1099,10 @@ function addChatMessage(message) {
      <div class="chat-text">${message.chat}</div>
      <div class="chat-timestamp">${formattedDate} ${formattedTime}</div>
  `;
- chatMessagesContainer.appendChild(messageDiv);
+if (prepend) {
+      chatMessagesContainer.prepend(messageDiv);
+  } else {
+      chatMessagesContainer.append(messageDiv);
 }
 
 function applyChatBorders() {
@@ -1276,7 +1279,7 @@ if (noChatAvailableMessage) {
    noChatAvailableMessage.remove();
 }
 const messageDiv = createChatMessage(message);
-chatMessagesContainer.insertBefore(messageDiv, chatMessagesContainer.firstChild);
+addChatMessage(message, true);
 applyChatBorders(); // Reapply borders after adding new 
 }
 });
