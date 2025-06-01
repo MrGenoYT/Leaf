@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -299,7 +299,7 @@ footer {
 margin-top: 4rem;
 padding: 2rem 0;
 background-color: var(--header-footer-bg);
-border-top: none;
+border-top: 1px solid var(--border-color);
 text-align: center;
 color: var(--header-footer-text);
 }
@@ -544,6 +544,8 @@ padding-bottom: 0;
 
 .chat-message-item.minute-separator {
 border-bottom: 1px solid var(--border-color);
+padding-top: 1rem;
+margin-top: 1rem;
 }
 
 .chat-message-header {
@@ -996,8 +998,9 @@ statusBadge.innerHTML = `
   </svg>
   Online
 `;
-if (chatMessagesContainer.innerHTML.includes("Bot is offline, no chat history available.")) {
-  chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No chat available.</p>';
+const noChatAvailableMessage = chatMessagesContainer.querySelector('#chat-status-message');
+if (noChatAvailableMessage && noChatAvailableMessage.textContent === "Bot is offline, no chat history available.") {
+  chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">No chat available.</p>';
 }
 } else {
 statusIndicator.style.backgroundColor = '#ef4444';
@@ -1009,7 +1012,7 @@ statusBadge.innerHTML = `
   </svg>
   Offline
 `;
-chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Bot is offline, no chat history available.</p>';
+chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">Bot is offline, no chat history available.</p>';
 }
 
 document.getElementById('player-count').textContent = data.onlinePlayersCount || 0;
@@ -1159,7 +1162,7 @@ if (isInitialLoad) {
 if (messages.length === 0) {
  chatEndReached = true;
  if (isInitialLoad) {
-   chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">No chat available.</p>';
+   chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">No chat available.</p>';
  }
  return;
 }
@@ -1176,7 +1179,7 @@ if (isInitialLoad) {
 } catch (error) {
 console.error('Error fetching chat history:', error);
 if (chatMessagesSkip === 0) {
-chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;">Error loading chat history.</p>';
+chatMessagesContainer.innerHTML = '<p class="info-label" style="text-align: center; margin-top: 1rem;" id="chat-status-message">Error loading chat history.</p>';
 }
 } finally {
 chatLoading = false;
