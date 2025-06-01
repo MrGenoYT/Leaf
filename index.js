@@ -356,20 +356,30 @@ function startBot() {
   });
 
   bot.on('chat', async (username, message) => {
-    if (username !== botOptions.username) {
-      sendPlayerMessage(username, message);
-      try {
-        const uuid = bot.players[username] ? bot.players[username].uuid : null;
-        const skinUrl = await getOrCreatePlayerFace(username, uuid);
+  if (username !== botOptions.username) {
+    const player = Object.values(bot.players).find(p =>
+      p.username.replace(/^\./, '') === username.replace(/^\./, '')
+    );
+    const trueUsername = player?.username || username;
+    const uuid = player?.uuid || null;
 
-        const chatMessage = new MinecraftChat({ username, chat: message });
-        await chatMessage.save();
-        io.emit('chatMessage', { username, chat: message, timestamp: chatMessage.timestamp, skinUrl: skinUrl });
-      } catch (err) {
-        console.error('Error saving chat message to MongoDB ❌:', err.message);
-      }
+    sendPlayerMessage(trueUsername, message);
+
+    try {
+      const skinUrl = await getOrCreatePlayerFace(trueUsername, uuid);
+      const chatMessage = new MinecraftChat({ username: trueUsername, chat: message });
+      await chatMessage.save();
+      io.emit('chatMessage', {
+        username: trueUsername,
+        chat: message,
+        timestamp: chatMessage.timestamp,
+        skinUrl,
+      });
+    } catch (err) {
+      console.error('Error saving chat message to MongoDB ❌:', err.message);
     }
-  });
+  }
+});
 
   bot.on('playerJoined', async (player) => {
     if (player.username !== botOptions.username) {
