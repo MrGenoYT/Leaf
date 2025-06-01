@@ -1075,7 +1075,7 @@ playerListContainer.innerHTML = '<p class="info-label" style="text-align: center
 }
 }
 
-function addChatMessage(message) {
+function addChatMessage(message, prepend) {
  const chatMessagesContainer = document.getElementById('chat-messages');
  const messageDiv = document.createElement('div');
  messageDiv.className = 'chat-message-item';
