@@ -1246,10 +1246,13 @@ populateUsernameDropdown();
 fetchChatHistory();
 
 document.getElementById('chat-messages').addEventListener('scroll', () => {
-const container = document.getElementById('chat-messages');
-if (container.scrollTop + container.clientHeight >= container.scrollHeight - 20 && !chatLoading && !chatEndReached) {
-fetchChatHistory();
-}
+  const container = document.getElementById('chat-messages');
+  if (
+    container.scrollTop <= 20 &&
+    !chatLoading && !chatEndReached
+  ) {
+    fetchChatHistory();
+  }
 });
 });
 
