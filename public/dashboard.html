@@ -1102,29 +1102,27 @@ chatMessagesContainer.appendChild(messageDiv);
 }
 
 function applyChatBorders() {
-const chatMessagesContainer = document.getElementById('chat-messages');
-const messageItems = chatMessagesContainer.children;
+  const chatMessagesContainer = document.getElementById('chat-messages');
+  const messageItems = chatMessagesContainer.children;
 
-for (let i = 0; i < messageItems.length; i++) {
- const currentMsgElement = messageItems[i];
- const currentTimestamp = new Date(currentMsgElement.dataset.timestamp);
+  for (let i = 0; i < messageItems.length; i++) {
+    const currentMsgElement = messageItems[i];
+    const currentTimestamp = new Date(currentMsgElement.dataset.timestamp);
 
- currentMsgElement.classList.remove('minute-separator');
+    currentMsgElement.classList.remove('minute-separator');
 
- if (i < messageItems.length - 1) {
-   const nextMsgElement = messageItems[i + 1];
-   const nextTimestamp = new Date(nextMsgElement.dataset.timestamp);
+    if (i === 0) continue;
 
-   const currentMinute = currentTimestamp.getFullYear() + '-' + currentTimestamp.getMonth() + '-' + currentTimestamp.getDate() + ' ' + currentTimestamp.getHours() + ':' + currentTimestamp.getMinutes();
-   const nextMinute = nextTimestamp.getFullYear() + '-' + nextTimestamp.getMonth() + '-' + nextTimestamp.getDate() + ' ' + nextTimestamp.getHours() + ':' + nextTimestamp.getMinutes();
+    const prevMsgElement = messageItems[i - 1];
+    const prevTimestamp = new Date(prevMsgElement.dataset.timestamp);
 
-   if (currentMinute !== nextMinute) {
-     currentMsgElement.classList.add('minute-separator');
-   }
- } else {
-   currentMsgElement.classList.add('minute-separator');
- }
-}
+    const currentMinute = currentTimestamp.getFullYear() + '-' + currentTimestamp.getMonth() + '-' + currentTimestamp.getDate() + ' ' + currentTimestamp.getHours() + ':' + currentTimestamp.getMinutes();
+    const prevMinute = prevTimestamp.getFullYear() + '-' + prevTimestamp.getMonth() + '-' + prevTimestamp.getDate() + ' ' + prevTimestamp.getHours() + ':' + prevTimestamp.getMinutes();
+
+    if (currentMinute !== prevMinute) {
+      currentMsgElement.classList.add('minute-separator');
+    }
+  }
 }
 
 
