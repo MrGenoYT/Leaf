@@ -477,16 +477,10 @@ background-color: transparent;
 }
 
 .date-picker-wrapper {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background-color: var(--primary-bg);
-  min-width: 150px;
+  flex-wrap: nowrap;
 }
 
 .date-picker-wrapper input[type="date"] {
@@ -509,17 +503,16 @@ cursor: pointer;
 }
 
 .date-picker-wrapper .date-text {
-font-weight: 500;
-min-width: 80px;
-display: inline-block;
-text-align: center;
+  font-weight: 500;
+  min-width: 80px;
+  flex-shrink: 0;
 }
 
 .date-picker-wrapper .vertical-border {
-  height: 1.6em;
   width: 1px;
+  height: 24px;
   background-color: var(--border-color);
-  margin: 0 0.5rem;
+  flex-shrink: 0;
 }
 
 .chat-messages {
