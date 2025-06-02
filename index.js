@@ -155,7 +155,6 @@ function sendPlayerList() {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
 
     if (playersExcludingBot.length === 0) {
-      sendChatEmbed('Player List', 'No other players online', DEFAULT_EMBED_COLOR);
       return;
     }
 
@@ -164,7 +163,6 @@ function sendPlayerList() {
       value: `Ping: ${player.ping || 'N/A'}ms | In Range: ${player.entity ? 'Yes' : 'No'}`,
       inline: true
     }));
-    sendChatEmbed('Player List', `${playersExcludingBot.length} player(s) online (excluding bot)`, DEFAULT_EMBED_COLOR, fields);
   } catch (err) {
     console.error('Error sending player list ❌:', err.message);
   }
