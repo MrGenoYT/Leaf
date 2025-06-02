@@ -82,6 +82,16 @@ const playerFaceSchema = new mongoose.Schema({
 });
 const PlayerFace = mongoose.model('PlayerFace', playerFaceSchema);
 
+const playerSessionSchema = new mongoose.Schema({
+  username: String,
+  joinTime: { type: Date, default: Date.now },
+  leaveTime: Date,
+  duration: Number,
+});
+const PlayerSession = mongoose.model('PlayerSession', playerSessionSchema);
+
+let currentActivePlayerSessions = {};
+
 function clearAllIntervals() {
   if (movementInterval) {
     clearInterval(movementInterval);
@@ -390,6 +400,10 @@ function startBot() {
       const skinUrl = await getOrCreatePlayerFace(player.username, player.uuid);
       player.skinUrl = skinUrl;
 
+      const newSession = new PlayerSession({ username: player.username, joinTime: new Date() });
+      await newSession.save();
+      currentActivePlayerSessions[player.username] = newSession._id;
+
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Joined', `**${player.username}** joined the game.`, SUCCESS_EMBED_COLOR, [
         { name: 'Current Players', value: `${onlinePlayersCount} (excluding bot)`, inline: true }
@@ -398,8 +412,19 @@ function startBot() {
     }
   });
 
-  bot.on('playerLeft', (player) => {
+  bot.on('playerLeft', async (player) => {
     if (player.username !== botOptions.username) {
+      const sessionId = currentActivePlayerSessions[player.username];
+      if (sessionId) {
+        const session = await PlayerSession.findById(sessionId);
+        if (session) {
+          session.leaveTime = new Date();
+          session.duration = session.leaveTime.getTime() - session.joinTime.getTime();
+          await session.save();
+        }
+        delete currentActivePlayerSessions[player.username];
+      }
+
       const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
       sendChatEmbed('Player Left', `**${player.username}** left the game.`, 0xff4500, [
         { name: 'Current Players', value: `${Math.max(0, onlinePlayersCount)} (excluding bot)`, inline: true }
@@ -457,6 +482,39 @@ app.get('/api/status', async (req, res) => {
       };
     }));
 
+    const playerOnlineStats = await Promise.all(playersExcludingBot.map(async p => {
+      const skinUrl = await getOrCreatePlayerFace(p.username, p.uuid);
+      let lastOnlineSessionTime = 'N/A';
+      let timePlayedSession = '00h 00m';
+
+      const activeSessionId = currentActivePlayerSessions[p.username];
+      if (activeSessionId) {
+        const activeSession = await PlayerSession.findById(activeSessionId);
+        if (activeSession) {
+          lastOnlineSessionTime = activeSession.joinTime;
+          const durationMs = new Date().getTime() - activeSession.joinTime.getTime();
+          const hours = Math.floor(durationMs / (1000 * 60 * 60));
+          const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+          timePlayedSession = `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+        }
+      } else {
+        const lastSession = await PlayerSession.findOne({ username: p.username, leaveTime: { $ne: null } }).sort({ leaveTime: -1 });
+        if (lastSession) {
+          lastOnlineSessionTime = lastSession.joinTime;
+          const hours = Math.floor(lastSession.duration / (1000 * 60 * 60));
+          const minutes = Math.floor((lastSession.duration % (1000 * 60 * 60)) / (1000 * 60));
+          timePlayedSession = `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+        }
+      }
+
+      return {
+        username: p.username,
+        skinUrl: skinUrl,
+        lastOnlineSessionTime: lastOnlineSessionTime,
+        timePlayedSession: timePlayedSession,
+      };
+    }));
+
     const gameModeApiDisplay = "Spectator";
 
     let diskInfo = { free: 0, total: 0 };
@@ -470,6 +528,7 @@ app.get('/api/status', async (req, res) => {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
       onlinePlayersCount: onlinePlayersCount,
       playerDetails,
+      playerOnlineStats,
       gameMode: gameModeApiDisplay,
       position: bot?.entity?.position ?
         {
@@ -565,6 +624,39 @@ setInterval(async () => {
       };
     }));
 
+    const playerOnlineStats = await Promise.all(playersExcludingBot.map(async p => {
+      const skinUrl = await getOrCreatePlayerFace(p.username, p.uuid);
+      let lastOnlineSessionTime = 'N/A';
+      let timePlayedSession = '00h 00m';
+
+      const activeSessionId = currentActivePlayerSessions[p.username];
+      if (activeSessionId) {
+        const activeSession = await PlayerSession.findById(activeSessionId);
+        if (activeSession) {
+          lastOnlineSessionTime = activeSession.joinTime;
+          const durationMs = new Date().getTime() - activeSession.joinTime.getTime();
+          const hours = Math.floor(durationMs / (1000 * 60 * 60));
+          const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+          timePlayedSession = `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+        }
+      } else {
+        const lastSession = await PlayerSession.findOne({ username: p.username, leaveTime: { $ne: null } }).sort({ leaveTime: -1 });
+        if (lastSession) {
+          lastOnlineSessionTime = lastSession.joinTime;
+          const hours = Math.floor(lastSession.duration / (1000 * 60 * 60));
+          const minutes = Math.floor((lastSession.duration % (1000 * 60 * 60)) / (1000 * 60));
+          timePlayedSession = `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+        }
+      }
+
+      return {
+        username: p.username,
+        skinUrl: skinUrl,
+        lastOnlineSessionTime: lastOnlineSessionTime,
+        timePlayedSession: timePlayedSession,
+      };
+    }));
+
     let diskInfo = { free: 0, total: 0 };
     try {
       diskInfo = await diskusage.check('/');
@@ -576,6 +668,7 @@ setInterval(async () => {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
       onlinePlayersCount: onlinePlayersCount,
       playerDetails,
+      playerOnlineStats,
       gameMode: "Spectator",
       position: bot?.entity?.position ?
         {
