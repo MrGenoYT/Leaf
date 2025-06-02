@@ -355,6 +355,12 @@ function startBot() {
     }
   });
 
+  bot.on('end', (reason) => {
+    isBotOnline = false;
+    clearAllIntervals();
+    reconnectBot();
+  });
+
   bot.on('chat', async (username, message) => {
   if (username !== botOptions.username) {
     const player = Object.values(bot.players).find(p =>
