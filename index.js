@@ -511,9 +511,9 @@ app.get('/api/chat', async (req, res) => {
     }
     if (date) {
       const startOfDay = new Date(date);
-      startOfDay.setUTCHours(0, 0, 0, 0);
+      startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
-      endOfDay.setUTCHours(23, 59, 59, 999);
+      endOfDay.setHours(23, 59, 59, 999);
       query.timestamp = { $gte: startOfDay, $lte: endOfDay };
     }
     if (search) {
