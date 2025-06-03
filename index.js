@@ -353,6 +353,11 @@ function startBot() {
       });
     });
 
+    bot.on('health', () => {
+      bot.health = bot.health;
+      bot.food = bot.food;
+    });
+
     setTimeout(() => {
       setupIntervals();
     }, 1000);
@@ -470,7 +475,7 @@ app.get('/api/status', async (req, res) => {
         username: p.username,
         uuid: p.uuid,
         skinUrl: skinUrl,
-        ping: p.ping || 'N/A'
+        ping: p.ping !== undefined ? `${p.ping} ms` : 'N/A'
       };
     }));
 
@@ -521,16 +526,15 @@ app.get('/api/status', async (req, res) => {
 
 app.get('/api/chat', async (req, res) => {
   try {
-    const { username, date, search } = req.query;
+    const { username, date, search, timezoneOffset } = req.query;
     let query = {};
     if (username) {
       query.username = username;
     }
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setUTCHours(23, 59, 59, 999);
+      const selectedDateAsUTC = new Date(date);
+      const startOfDay = new Date(selectedDateAsUTC.getTime() + (parseInt(timezoneOffset) * 60 * 1000));
+      const endOfDay = new Date(startOfDay.getTime() + (24 * 60 * 60 * 1000) - 1);
       query.timestamp = { $gte: startOfDay, $lte: endOfDay };
     }
     if (search) {
@@ -578,7 +582,7 @@ setInterval(async () => {
         username: p.username,
         uuid: p.uuid,
         skinUrl: skinUrl,
-        ping: p.ping || 'N/A'
+        ping: p.ping !== undefined ? `${p.ping} ms` : 'N/A'
       };
     }));
 
