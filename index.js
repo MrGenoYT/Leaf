@@ -160,7 +160,7 @@ function sendPlayerList() {
 
     const fields = playersExcludingBot.map(player => ({
       name: player.username,
-      value: `Ping: ${player.ping || 'N/A'}ms | In Range: ${player.entity ? 'Yes' : 'No'}`,
+      value: `In Range: ${player.entity ? 'Yes' : 'No'}`,
       inline: true
     }));
   } catch (err) {
@@ -182,8 +182,7 @@ function sendBotStats() {
     const posStr = `X: ${Math.floor(position.x)}, Y: ${Math.floor(position.y)}, Z: ${Math.floor(position.z)}`;
     const memoryUsage = process.memoryUsage();
     const memoryStr = `${Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100} MB`;
-    const ping = bot.player ? bot.player.ping : 'Unknown';
-
+    
     const gameModeDisplay = bot?.game?.gameMode || 'N/A';
 
     const onlinePlayersCount = getOnlinePlayersExcludingBot().length;
@@ -193,7 +192,6 @@ function sendBotStats() {
       { name: 'Position', value: posStr, inline: true },
       { name: 'Game Mode', value: gameModeDisplay, inline: true },
       { name: 'Memory Usage', value: memoryStr, inline: true },
-      { name: 'Ping', value: `${ping}ms`, inline: true },
       { name: 'Movement Count', value: `${movementCount} moves`, inline: true },
       { name: 'Players Online', value: `${onlinePlayersCount} (excluding bot)`, inline: true },
       { name: 'Server Load', value: `${os.loadavg()[0].toFixed(2)}`, inline: true }
@@ -329,16 +327,15 @@ function startBot() {
   bot.once('spawn', () => {
     sendDiscordEmbed('Bot Connected', `${botOptions.username} has joined the server.`, SUCCESS_EMBED_COLOR);
     isBotOnline = true;
-    lastOnlineTime = Date.now();
     botStartTime = Date.now();
+    lastOnlineTime = Date.now();
 
     if (bot._client && bot._client.socket) {
       bot._client.socket.setKeepAlive(true, 30000);
       bot._client.socket.on('close', (hadError) => {
       });
     }
-
-    // Listen to player_info packet to detect gamemode
+    
     bot._client.on('player_info', (packet) => {
       packet.data.forEach((player) => {
         if (player.uuid === bot.uuid) {
@@ -356,7 +353,7 @@ function startBot() {
     });
 
     bot.on('health', () => {
-      // Health, hunger, and saturation are automatically updated on the bot object
+      
     });
 
     setTimeout(() => {
@@ -476,11 +473,8 @@ app.get('/api/status', async (req, res) => {
         username: p.username,
         uuid: p.uuid,
         skinUrl: skinUrl,
-        ping: p.ping !== undefined ? `${p.ping} ms` : 'N/A'
       };
     }));
-
-    const gameModeApiDisplay = bot?.game?.gameMode || 'N/A';
 
     let diskInfo = { free: 0, total: 0 };
     try {
@@ -493,13 +487,13 @@ app.get('/api/status', async (req, res) => {
       message: isBotOnline ? "Bot is running!" : "Bot is offline",
       onlinePlayersCount: onlinePlayersCount,
       playerDetails,
-      gameMode: gameModeApiDisplay,
+      gameMode: bot?.game?.gameMode || 'N/A',
       position: bot?.entity?.position ?
         {
           x: Math.floor(bot.entity.position.x),
           y: Math.floor(bot.entity.position.y),
           z: Math.floor(bot.entity.position.z)
-        } : null,
+        } : 'N/A',
       uptime: botStartTime && isBotOnline ? Math.floor((Date.now() - botStartTime) / 1000) : 0,
       movements: movementCount,
       memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
@@ -507,16 +501,16 @@ app.get('/api/status', async (req, res) => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
-      botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
-      botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
+      botHealth: bot?.health !== undefined && isBotOnline ? `${bot.health}/20` : 'N/A',
+      botFood: bot?.food !== undefined && isBotOnline ? `${bot.food}/20` : 'N/A',
+      botLatency: bot?.player?.ping !== undefined && isBotOnline ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
       cpuUsage: getCpuUsage().toFixed(2),
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
-      minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
-      serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
+      minecraftDay: bot?.time?.day !== undefined && isBotOnline ? bot.time.day : 'N/A',
+      minecraftTime: bot?.time?.timeOfDay !== undefined && isBotOnline ? bot.time.timeOfDay : 'N/A',
+      serverDifficulty: bot?.game?.difficulty !== undefined && isBotOnline ? bot.game.difficulty : 'N/A',
     };
     res.json(botStatus);
   } catch (err) {
@@ -533,15 +527,14 @@ app.get('/api/chat', async (req, res) => {
       query.username = username;
     }
     if (date) {
-      const selectedDate = new Date(date);
-      const offsetMinutes = parseInt(timezoneOffset, 10);
-
-      // Calculate startOfDay in UTC, adjusted for local timezone
-      const startOfDay = new Date(selectedDate.getTime() + (offsetMinutes * 60 * 1000));
+      const localDate = new Date(date);
+      const offsetMinutes = parseInt(timezoneOffset) || 0;
+      
+      const startOfDay = new Date(localDate.getTime() + offsetMinutes * 60 * 1000);
       startOfDay.setUTCHours(0, 0, 0, 0);
-
-      // Calculate endOfDay in UTC
-      const endOfDay = new Date(startOfDay.getTime() + (24 * 60 * 60 * 1000) - 1); // Add 24 hours minus 1 millisecond
+      
+      const endOfDay = new Date(localDate.getTime() + offsetMinutes * 60 * 1000);
+      endOfDay.setUTCHours(23, 59, 59, 999);
 
       query.timestamp = { $gte: startOfDay, $lte: endOfDay };
     }
@@ -585,13 +578,11 @@ setInterval(async () => {
     const playersExcludingBot = getOnlinePlayersExcludingBot();
     const onlinePlayersCount = playersExcludingBot.length;
     const playerDetails = await Promise.all(playersExcludingBot.map(async p => {
-      const ping = p.ping !== undefined ? `${p.ping} ms` : 'N/A';
       const skinUrl = await getOrCreatePlayerFace(p.username, p.uuid);
       return {
         username: p.username,
         uuid: p.uuid,
         skinUrl: skinUrl,
-        ping: ping
       };
     }));
 
@@ -612,7 +603,7 @@ setInterval(async () => {
           x: Math.floor(bot.entity.position.x),
           y: Math.floor(bot.entity.position.y),
           z: Math.floor(bot.entity.position.z)
-        } : null,
+        } : 'N/A',
       uptime: botStartTime && isBotOnline ? Math.floor((Date.now() - botStartTime) / 1000) : 0,
       movements: movementCount,
       memoryUsage: `${Math.round(process.memoryUsage().rss / 1024 / 1024 * 100) / 100} MB`,
@@ -620,16 +611,16 @@ setInterval(async () => {
       serverHost: currentServerHost,
       serverPort: currentServerPort,
       botName: BOT_USERNAME,
-      botHealth: bot?.health !== undefined ? `${bot.health}/20` : 'N/A',
-      botFood: bot?.food !== undefined ? `${bot.food}/20` : 'N/A',
-      botLatency: bot?.player?.ping !== undefined ? `${bot.player.ping}ms` : 'N/A',
+      botHealth: bot?.health !== undefined && isBotOnline ? `${bot.health}/20` : 'N/A',
+      botFood: bot?.food !== undefined && isBotOnline ? `${bot.food}/20` : 'N/A',
+      botLatency: bot?.player?.ping !== undefined && isBotOnline ? `${bot.player.ping}ms` : 'N/A',
       serverLoad: os.loadavg()[0].toFixed(2),
       cpuUsage: getCpuUsage().toFixed(2),
       diskFree: `${(diskInfo.free / (1024 ** 3)).toFixed(2)} GB`,
       diskTotal: `${(diskInfo.total / (1024 ** 3)).toFixed(2)} GB`,
-      minecraftDay: bot?.time?.day !== undefined ? bot.time.day : 'N/A',
-      minecraftTime: bot?.time?.timeOfDay !== undefined ? bot.time.timeOfDay : 'N/A',
-      serverDifficulty: bot?.game?.difficulty !== undefined ? bot.game.difficulty : 'N/A',
+      minecraftDay: bot?.time?.day !== undefined && isBotOnline ? bot.time.day : 'N/A',
+      minecraftTime: bot?.time?.timeOfDay !== undefined && isBotOnline ? bot.time.timeOfDay : 'N/A',
+      serverDifficulty: bot?.game?.difficulty !== undefined && isBotOnline ? bot.game.difficulty : 'N/A',
     };
     io.emit('botStatusUpdate', botStatus);
   } catch (err) {
